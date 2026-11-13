@@ -1,14 +1,14 @@
 # Spec 04 — Repository scanning
-Status: Draft · Phase: 2 · PRD v2 ref: FR4 · Depends on: 00-foundation, 02-extraction, 03-api-surface-diffing
+Status: Draft · Phase: 2 · PRD v3 ref: FR4 · Depends on: 00-foundation, 02-extraction, 03-api-surface-diffing
 
 ## Goal
-For a run's change records and the repository at the bump branch head, find the exact
+For a run's change records and the repository at the default branch head, find the exact
 call sites each change affects, or find nothing and end the run silently. Precision
 and low noise are the product.
 
 ## User stories
 - As a developer, I only hear about changes that touch code in my repo so that every
-  PR or comment is worth reading.
+  PR or issue is worth reading.
 - As a reviewer, I get file, line, matched symbol and confidence for every finding so
   that I can jump straight to the code.
 - As a developer, I can exclude vendored or generated code with an ignore file.
@@ -16,7 +16,7 @@ and low noise are the product.
 ## Requirements
 | ID | Requirement |
 |---|---|
-| F4.1 | Scan the repository at one pinned revision: the head SHA of the bump branch (or the working tree for the CLI) |
+| F4.1 | Scan the repository at one pinned revision: the head commit of the default branch at the start of the run (or the working tree for the CLI) |
 | F4.2 | Parse Python files with **libcst** and resolve names with its metadata providers (`QualifiedNameProvider`, `ScopeProvider`): imports, `from` imports, aliases |
 | F4.3 | Track simple client assignments in the same file (a variable or attribute bound to a client class instance) and resolve attribute chains to qualified names, e.g. `client = OpenAI(); client.chat.completions.create(...)` |
 | F4.4 | Should: follow one hop to a module-level client imported from another module in the same repo (`from app.clients import client`). Findings from this path are tagged so the eval can report them separately |
@@ -27,6 +27,7 @@ and low noise are the product.
 | F4.9 | A file that fails to parse is skipped with a logged warning; the scan continues |
 | F4.10 | A 500-file repo scans in under 30 seconds on a cold cache. Files that do not mention the package name are skipped before parsing |
 | F4.11 | Findings are written to the database before fix generation starts |
+| F4.12 | **Literal-argument matching** (used by spec 10): find calls on a resolved SDK symbol that pass a given string literal to a named argument, for example `model="…"`. A module-level constant in the same file, used one step away, also matches, and the finding points at the constant |
 
 ## Acceptance criteria
 - [ ] GIVEN `from openai import OpenAI as OAI` and `OAI().chat.completions.create(...)`, WHEN scanning for a change on that method, THEN the call is found through the alias.
@@ -36,6 +37,7 @@ and low noise are the product.
 - [ ] GIVEN a matching call inside `vendor/` listed in `.guardianignore`, THEN it produces no finding.
 - [ ] GIVEN a Python file with a syntax error, THEN it is skipped with a warning and other files are scanned.
 - [ ] GIVEN a local function named `create` unrelated to the SDK, THEN it is not matched (no name-only matching).
+- [ ] GIVEN a search for literal `"X"` on argument `model`, THEN `create(model="X")` on a resolved client matches, and the same string in an unrelated call, a comment or a docstring does not.
 - [ ] A 500-file benchmark repo scans in under 30 seconds.
 
 ## Technical notes
@@ -47,6 +49,9 @@ and low noise are the product.
   finding points at a node the codemod can rewrite.
 - There is no version gating. The run's range (spec 01) already decided which changes
   apply.
+- Scanning is deterministic on purpose, even though the fixer is an agent. The scanner
+  decides whether the app speaks at all, so its precision must be measurable and
+  repeatable.
 
 ## Test plan
 - Unit: import and alias resolution (F4.2), client tracking (F4.3, F4.4), parameter
@@ -65,5 +70,7 @@ and low noise are the product.
 ## Open questions / decisions
 - Is a positional argument ever affected by a parameter rename in the two SDKs? If
   yes, F4.5 needs a positional rule. Check during Phase 2.
+- 2026-11-13 (v3): the scan target is the default branch head, not a bump branch;
+  literal-argument matching added for API-level changes.
 - 2026-11-13: tree-sitter replaced by libcst; version gating removed; target changed
   from 2 minutes to 30 seconds.

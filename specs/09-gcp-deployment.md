@@ -1,5 +1,5 @@
 # Spec 09 — Google Cloud deployment
-Status: Draft · Phase: 5 · PRD v2 ref: §7 (threat model), §8 (architecture) · Depends on: 00-foundation, 06-verification, 07-github-integration
+Status: Draft · Phase: 6 · PRD v3 ref: §7 (threat model), §8 (architecture) · Depends on: 00-foundation, 06-verification, 07-github-integration
 
 ## Goal
 Run the pipeline hosted on GCP with the same code that runs locally: a serverless
@@ -16,11 +16,11 @@ Deployment is scripted and the cloud-specific threats are closed.
 ## Requirements
 | ID | Requirement |
 |---|---|
-| F9.1 | **Webhook service on Cloud Run:** the FastAPI app from spec 07. It verifies the signature, publishes one message per run request, and returns. It has no database access. Scales to zero; max instances capped |
-| F9.2 | **Pub/Sub:** one topic and one pull subscription for run requests, with a dead-letter topic after a fixed number of delivery attempts |
+| F9.1 | **Webhook service on Cloud Run:** the FastAPI app from spec 07. It verifies the signature, publishes one `event` job per installation event, and returns. It has no database access. Scales to zero; max instances capped |
+| F9.2 | **Pub/Sub:** one topic and one pull subscription carrying the three job types (`poll`, `run`, `event`), with a dead-letter topic after a fixed number of delivery attempts |
 | F9.3 | **Worker on a Compute Engine VM** with Docker: pulls from the subscription, runs `pipeline.run`, and acknowledges only when the run has finished or ended with a recorded outcome |
 | F9.4 | The worker extends the message lease while a run is in progress, so a run of up to 15 minutes is not redelivered mid-flight |
-| F9.5 | Redelivery is safe: the run key (repo, package, to_version, head_sha) makes a repeated message a no-op |
+| F9.5 | Redelivery is safe: the run key (repo, target, head SHA) makes a repeated `run` message a no-op, and a repeated `poll` finds nothing new |
 | F9.6 | **Cloud SQL for Postgres** holds all tables. The worker connects through the Cloud SQL Auth Proxy or a private IP |
 | F9.7 | **Cloud Storage** implements the `BlobStore` interface (F0.7) |
 | F9.8 | **Secret Manager** holds the GitHub App private key and the webhook secret. Nothing secret is in an image, a `.env` file on the VM, or the repo |
@@ -32,10 +32,15 @@ Deployment is scripted and the cloud-specific threats are closed.
 | F9.14 | Logs go to Cloud Logging as structured JSON with the run ID. An alert fires on dead-lettered messages |
 | F9.15 | A budget alert is set on the project |
 | F9.16 | The worker runs as a systemd service that restarts on failure and starts on boot, so the VM can be stopped and started between demos |
+| F9.17 | **Cloud Scheduler** publishes one `poll` job to the topic on a schedule (daily by default) |
+| F9.18 | Fan-out happens in the worker: handling a `poll` job publishes one `run` job per active repo for each change that passes the gate. The worker's service account may publish to the topic as well as subscribe |
+| F9.19 | **Pause switch:** the pause flag (F0.12) is read from a runtime setting that can be flipped without a deploy. While set, the worker still polls and records, and writes nothing to GitHub |
 
 ## Acceptance criteria
 - [ ] GIVEN an empty GCP project, WHEN the deploy script runs, THEN all resources exist and a health check on the Cloud Run URL passes.
-- [ ] GIVEN a Dependabot bump PR on a test repo with the App installed, THEN a draft fix PR is opened through the deployed system.
+- [ ] GIVEN the Cloud Scheduler job is triggered, THEN a `poll` job reaches the worker and the sources are checked.
+- [ ] GIVEN a release that affects a test repo with the App installed, THEN a draft upgrade PR is opened through the deployed system with no manual step after the poll.
+- [ ] GIVEN the pause switch is set, THEN a run completes and records `paused`, and GitHub shows no new PR or issue.
 - [ ] GIVEN the same Pub/Sub message delivered twice, THEN one run and one PR.
 - [ ] GIVEN a run that takes 8 minutes, THEN the message is not redelivered while it runs.
 - [ ] GIVEN a message that fails every attempt, THEN it lands in the dead-letter topic and the alert fires.
@@ -74,7 +79,12 @@ Deployment is scripted and the cloud-specific threats are closed.
 - Cloud SQL for Postgres or Firestore? Cloud SQL is the default because local
   development uses the same SQL schema on SQLite; Firestore would cost less.
 - Fallback if Phase 5 slips: SQLite on the worker VM's disk in place of Cloud SQL
-  (PRD v2 §10). F9.1 already keeps the webhook service off the database, so this
+  (PRD v3 §10). F9.1 already keeps the webhook service off the database, so this
   swap touches only the worker.
 - Which region, chosen for Vertex AI model availability.
+- Where the pause flag lives: a row in Cloud SQL or a Secret Manager value. Either
+  works; pick the one that needs no extra permission for the worker.
+- 2026-11-13 (v3): Cloud Scheduler, worker-side fan-out and the pause switch added.
+  The webhook service now carries installation events, not bump-PR events. Moved to
+  Phase 6.
 - 2026-11-13: new spec; settles the v1 open question "hosted or local-only".

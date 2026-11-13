@@ -1,5 +1,5 @@
 # Spec 03 — API-surface diffing and reconciliation
-Status: Draft · Phase: 1 · PRD v2 ref: FR2 (API diff), FR3 (confidence, symbol check) · Depends on: 00-foundation, 01-change-discovery; reconciliation consumes 02-extraction
+Status: Draft · Phase: 1 · PRD v3 ref: FR2 · Depends on: 00-foundation, 01-change-discovery; reconciliation consumes 02-extraction
 
 ## Goal
 Diff the public API surface of the run's exact old and new SDK versions with
@@ -26,6 +26,8 @@ records about symbols that never existed are dropped.
 | F3.8 | **Confidence:** a record whose symbol and change the diff confirms is `high`; a record the diff is silent on is `medium`. Silence never removes a record |
 | F3.9 | A removal or signature change in the diff with no matching extracted record becomes a record with `source: diff`, confidence `high`, and no migration hint. It is fixable only where a codemod applies |
 | F3.10 | Output for the run: the list of change records with confidence, ready for the scanner |
+| F3.11 | **Gate diff:** at poll time, diff each new release against the release before it. A removal or signature change found there counts as a breaking change record for the release gate (F1.7), even when the notes are silent |
+| F3.12 | **API lookup:** `lookup(version, symbol)` returns the signature and docstring of a symbol from a cached surface. The agent fixer's `lookup_api` tool uses it (spec 11) |
 
 ## Acceptance criteria
 - [ ] GIVEN fixture versions `1.2.0` and `1.3.0` where `Client.create(engine=)` became `Client.create(model=)`, THEN the diff reports the parameter change and the matching record is `high`.
@@ -34,6 +36,8 @@ records about symbols that never existed are dropped.
 - [ ] GIVEN `Client.old` removed and a record with `replacement: Client.new` that exists in the new surface, THEN the change is classed as a rename.
 - [ ] GIVEN a removed symbol no release note mentions, THEN a `source: diff` record exists for it.
 - [ ] GIVEN two runs over the same version pair, THEN PyPI is contacted only for the first.
+- [ ] GIVEN a new release that removes a public symbol its notes do not mention, THEN the release passes the gate.
+- [ ] GIVEN `lookup("1.3.0", "Client.create")`, THEN the signature and docstring of that version are returned; an unknown symbol returns a clear "not found".
 - [ ] A canary fixture package whose `__init__` raises on import loads without error, proving nothing is executed.
 
 ## Technical notes
@@ -59,6 +63,9 @@ records about symbols that never existed are dropped.
 ## Open questions / decisions
 - Do `source: diff` records add useful findings or mostly noise? Measure in the
   scanner eval; if noise, restrict F3.9 to removals only.
+- 2026-11-13 (v3): two diffs now exist. The gate diff (F3.11) is release vs previous
+  release, at poll time. The run diff (F3.3) is the repo's pinned version vs the
+  latest, per run. `lookup` added for the agent.
 - 2026-11-13: v1's rule "the diff overrides the LLM and rejects the record" is
   replaced by F3.8. The v1 open question (pairwise or first-vs-last) is settled:
   old vs new directly.

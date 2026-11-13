@@ -1,87 +1,94 @@
 # Spec 07 — GitHub App integration
-Status: Draft · Phase: 4 · PRD v2 ref: FR1 (trigger), FR7 · Depends on: 01-change-discovery, 06-verification
+Status: Draft · Phase: 5 · PRD v3 ref: FR7 · Depends on: 01-change-discovery, 06-verification, 11-agent-fixer
 
 ## Goal
-Operate as a real GitHub App that reacts to Dependabot and Renovate bump PRs: start a
-run, and deliver the result as one draft fix PR based on the bump branch, or one
-comment, or nothing.
+Operate as a real GitHub App: know which repositories are installed, and deliver each
+run's result as one draft upgrade PR (version bump and fix together), or one issue, or
+nothing.
 
 ## User stories
-- As a developer, when a bump PR needs code changes I get a draft PR stacked on it
-  with the fixes.
-- As a reviewer, I see each change with its release-note link, the affected files, the
-  confidence, and the verification level reached.
-- As a developer, if the app cannot verify a fix I get one comment on the bump PR
-  listing the affected call sites.
-- As a developer, I can close a fix PR and the app will not reopen it for the same
-  target version.
-- As a repo owner with sensitive CI secrets, I can switch to comment-only mode so the
+- As a developer, I install the App and it checks my current SDK versions once.
+- As a developer, when a new SDK release breaks calls in my code I get one draft PR
+  with the bump and the fixes.
+- As a reviewer, I see each change with a provider link and quote, the affected files,
+  the confidence and the verification level reached.
+- As a developer, if the app cannot verify a fix I get one issue listing the affected
+  call sites.
+- As a developer, I can close a PR and the app will not reopen it for the same changes.
+- As a repo owner with sensitive CI secrets, I can switch to issue-only mode so the
   app never pushes code.
 
 ## Requirements
 | ID | Requirement |
 |---|---|
 | F7.1 | Run as a GitHub App using installation tokens. Personal access tokens are never used |
-| F7.2 | Permissions: Contents (read and write), Pull requests (read and write), Metadata (read). **No Issues permission and no Workflows permission** |
+| F7.2 | Permissions: Contents (read and write), Pull requests (read and write), Issues (read and write), Metadata (read). **No Workflows permission** |
 | F7.3 | Verify the webhook signature (HMAC SHA-256) on every request; reject an invalid one with 401 and process nothing |
-| F7.4 | **Trigger:** `pull_request` events `opened` and `synchronize` whose author is `dependabot[bot]` or `renovate[bot]`. The webhook handler verifies, enqueues a run request, and returns at once |
-| F7.5 | The worker asks spec 01 for the version range. If the PR does not upgrade a watched package, the run ends silently |
-| F7.6 | **Fix PR:** create branch `guardian/fix-<package>-<to_version>` from the bump branch head, commit the patch, and open a **draft** PR whose base is the bump branch |
-| F7.7 | The app never pushes to the bump branch or the default branch |
-| F7.8 | PR description: a table with one row per change (release-note link, confidence, affected files, verification level); a list of report-only changes with call sites; the could-not-run summary; and the fix tier used |
-| F7.9 | One fix PR per bump PR. When the bump PR moves to a new head or a newer version, the same fix PR is updated (branch reset to the new result), not duplicated |
-| F7.10 | A closed, unmerged fix PR is remembered by (repo, package, to_version) and is never reopened or recreated for that target version |
-| F7.11 | **Comment fallback:** when the outcome is `unverified`, or every finding is report-only, post one comment on the bump PR listing changes and call sites. A later run edits that comment instead of adding another |
-| F7.12 | **Comment-only mode:** when enabled for the repo, the patch is posted as a diff in the comment and nothing is pushed |
-| F7.13 | No findings → no PR and no comment |
-| F7.14 | All GitHub API calls use the backoff helper (F0.9) |
-| F7.15 | Delivery is idempotent: a redelivered webhook or a retried run produces no duplicate PR or comment |
+| F7.4 | Webhook events: `installation` and `installation_repositories`. The handler verifies, enqueues an `event` job and returns at once. The worker registers or deactivates rows in `repos` |
+| F7.5 | A newly installed repo gets a catch-up run per watched package and API source (F1.9) |
+| F7.6 | **Upgrade PR:** create or reset branch `guardian/upgrade-<package>` from the run's default-branch commit, add one commit with the bump and the fix, and open a **draft** PR against the default branch |
+| F7.7 | The app never pushes to the default branch, and force-pushes only to its own `guardian/*` branches |
+| F7.8 | PR description: a table with one row per change (provider link, evidence quote, confidence, affected files); the verification level; remaining call sites that need manual work; could-not-run tests; the fix tier used per finding |
+| F7.9 | A `partial` patch (F5.13) opens a PR whose title says so and whose description lists what is left |
+| F7.10 | One open PR per (repo, package). A later run updates the same PR: branch reset, title and description rewritten |
+| F7.11 | **Closed-PR memory:** when a guardian PR was closed without merging, the change IDs it covered are stored as declined. A new PR opens only when the affected set contains a change that is not declined |
+| F7.12 | **Issue fallback:** when nothing could be verified (outcome `unverified`, or every finding report-only), open one issue per (repo, package) listing changes and call sites. A later run edits that issue. A closed issue is remembered like a closed PR |
+| F7.13 | **Issue-only mode:** when set for the repo, the patch is posted as a diff in the issue and nothing is pushed |
+| F7.14 | If an open Dependabot or Renovate PR bumps the same package, the upgrade PR links to it |
+| F7.15 | No findings → no PR and no issue |
+| F7.16 | Repo config in `.github/guardian.yml`, read from the default branch: `mode` (`pr` or `issue`), `packages` (subset), `api_changes` (`pr`, `issue` or `off`) |
+| F7.17 | The global pause flag (F0.12) is checked before any write to GitHub |
+| F7.18 | All GitHub API calls use the backoff helper (F0.9) |
+| F7.19 | Delivery is idempotent: a redelivered job produces no duplicate PR, commit or issue |
+| F7.20 | Uninstalling deactivates the repo; no further runs target it |
 
 ## Acceptance criteria
 - [ ] GIVEN a payload with an invalid signature, THEN the response is 401 and nothing is enqueued.
-- [ ] GIVEN a `pull_request.opened` event from a human author, THEN nothing is enqueued.
-- [ ] GIVEN a Dependabot PR that bumps an unwatched package, THEN the run ends with no output.
-- [ ] GIVEN a verified patch, THEN a draft PR exists whose base is the bump branch and whose head is `guardian/fix-…`, and the bump branch itself has no new commit.
-- [ ] GIVEN the bump PR receives a `synchronize` event to a newer version, THEN the existing fix PR is updated and no second PR exists.
-- [ ] GIVEN the fix PR was closed for (repo, package, 1.45.0), WHEN the bump PR is rebased at the same version, THEN no PR is opened.
-- [ ] GIVEN an `unverified` outcome on two consecutive runs, THEN the bump PR has exactly one guardian comment.
-- [ ] GIVEN comment-only mode, THEN no branch is created and the comment contains the diff.
-- [ ] GIVEN the same webhook delivered twice, THEN one PR.
+- [ ] GIVEN an `installation.created` event for 2 repos, THEN 2 active rows exist and catch-up runs are enqueued.
+- [ ] GIVEN a verified patch, THEN a draft PR exists from `guardian/upgrade-openai` to the default branch, with one commit that changes the dependency file and the code, and the default branch has no new commit.
+- [ ] GIVEN a later release for the same package while the PR is open, THEN the same PR number now shows the new version and there is no second PR.
+- [ ] GIVEN the PR was closed covering changes {A, B}, WHEN a new release still affects only {A, B}, THEN no PR is opened.
+- [ ] GIVEN the same closed PR, WHEN a new release adds affected change C, THEN a new PR is opened.
+- [ ] GIVEN an `unverified` outcome on two consecutive runs, THEN the repo has exactly one guardian issue.
+- [ ] GIVEN issue-only mode, THEN no branch is created and the issue contains the diff.
+- [ ] GIVEN a `partial` patch, THEN the PR title marks it and the description lists the remaining call sites.
+- [ ] GIVEN the pause flag is set, THEN no PR, commit or issue is written and the run records `paused`.
+- [ ] GIVEN the same run job delivered twice, THEN one PR with one commit.
+- [ ] GIVEN the App is uninstalled, THEN the repo is inactive and a later fan-out skips it.
 - [ ] The permission list in the App manifest matches F7.2 exactly.
 
 ## Technical notes
-- Repo settings live in `.github/guardian.yml`, read from the **default branch**, never
-  from the PR head. Keys: `comment_only` (default false), `packages` (optional subset).
-- The comment carries a hidden marker (`<!-- api-change-guardian -->`) so it can be
-  found and edited. Commenting on a PR uses the Pull requests permission; no Issues
-  permission is needed.
+- PRs and issues carry a hidden marker (`<!-- api-change-guardian:<package> -->`) so
+  they can be found and edited. State is confirmed through the API at delivery time;
+  no `pull_request` webhook is needed.
 - Because the App has no Workflows permission, GitHub refuses any push that changes a
-  workflow file. That is a second layer behind the AST guard (F5.5).
-- Pushing the fix branch triggers the repo's own CI. The patch has passed the AST
-  guard by then; comment-only mode is the answer for repos that cannot accept that.
-- A foreign commit on a Dependabot branch stops Dependabot rebasing it. F7.7 avoids
-  this by using a separate branch.
+  workflow file. That is a second layer behind the AST guard (F5.8).
+- Pushing the branch triggers the repo's own CI. The patch has passed the AST guard by
+  then; issue-only mode is the answer for repos that cannot accept that.
+- The app opens its own bump only when call sites are affected. A plain bump with no
+  affected code is left to Dependabot or Renovate, which avoids duplicate PRs in the
+  common case.
 - The App manifest is committed to the repo.
 
 ## Test plan
-- Unit: signature check (F7.3), event filter (F7.4), PR description rendering (F7.8),
-  closed-PR memory (F7.10), comment marker handling (F7.11).
-- Integration against a stubbed GitHub API: fix PR, update on synchronize, comment
-  fallback, comment-only mode, duplicate delivery (F7.6 to F7.15).
+- Unit: signature check (F7.3), PR description rendering (F7.8), declined-set logic
+  (F7.11), marker handling (F7.12), config parsing (F7.16).
+- Integration against a stubbed GitHub API: install and uninstall, upgrade PR, update
+  on a later run, issue fallback, issue-only mode, pause, duplicate delivery.
 - One live end-to-end test on a real test repo, run locally behind a webhook tunnel,
   recorded for the demo.
 
 ## Out of scope
 - Auto-merge in any form.
-- Opening the app's own bump PR for repos without Dependabot or Renovate (stretch goal).
-- Hosting (spec 09).
+- Stacking fixes onto an existing Dependabot or Renovate PR (stretch goal).
+- API-level PR specifics (spec 10) and hosting (spec 09).
 
 ## Open questions / decisions
-- What happens to the fix PR when the bump PR is merged or closed first? Proposed:
-  bump PR closed unmerged → close the fix PR with a note; bump PR merged → leave the
-  fix PR and check how GitHub retargets its base. Verify the retargeting behaviour on
-  a test repo in Phase 4.
-- Should a "no affected call sites found" comment exist? Default is silence (F7.13);
-  PRD v2 lists this as open.
-- 2026-11-13: hosting question from v1 is settled: GCP, spec 09. Issues are replaced
-  by comments on the bump PR.
+- Should a merged Dependabot PR for the same version close the guardian PR, or should
+  the next run simply find the repo `up-to-date` and close it then? Proposed: the
+  latter.
+- Should the app also update its PR when the default branch moves and the PR
+  conflicts? Proposed: not in v3; the next gated release refreshes it.
+- 2026-11-13 (v3): bump-PR trigger, stacked fix PR and comment fallback are replaced by
+  installation events, a self-contained upgrade PR and an issue fallback. Issues
+  permission added.

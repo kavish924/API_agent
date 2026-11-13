@@ -4,9 +4,13 @@ Spec-driven development (SDD): **every feature gets a written spec before code.*
 feature is "done" only when its acceptance criteria are demonstrably met and its spec
 status is updated.
 
-**Source of truth:** PRD v2 ([Claude doc](https://claude.ai/artifact/8ud7FGK43L3XkVkWmto4xm)).
+**Source of truth:** PRD v3 ([Claude doc](https://claude.ai/artifact/8ud7FGK43L3XkVkWmto4xm)).
 The PDF in the repo root is PRD v1 and is superseded. These specs were rewritten for
-v2 on 2026-11-13; see section 6 for what changed.
+v3 on 2026-11-13; see section 6 for what changed.
+
+**Product in one line:** "Dependabot for APIs". When a provider ships a breaking
+change, the app scans every installed repo and opens one draft PR that holds the
+version bump and the code fix together.
 
 ---
 
@@ -22,8 +26,8 @@ spec drafted → reviewed → implemented → verified against acceptance criter
 - Specs use a fixed template: Goal → User stories → Requirements (numbered IDs) →
   Acceptance criteria → Technical notes → Test plan → Out of scope → Open questions.
 - Requirement IDs are local to a spec (`F1.1` = spec 01, requirement 1). Each spec
-  header names the PRD v2 section it covers. A test file that covers a requirement
-  references the ID (e.g. `test_discovery.py  # covers F1.2, F1.3`).
+  header names the PRD v3 section it covers. A test file that covers a requirement
+  references the ID (e.g. `test_watch.py  # covers F1.2, F1.3`).
 - Statuses: `Draft → Approved → In progress → Implemented → Verified`.
 - No code lands for a feature whose spec is still `Draft`.
 
@@ -31,96 +35,97 @@ spec drafted → reviewed → implemented → verified against acceptance criter
 
 ## 2. Spec index
 
-| Spec | Feature | PRD v2 ref | Phase | Status |
+| Spec | Feature | PRD v3 ref | Phase | Status |
 |---|---|---|---|---|
 | [`00-foundation.md`](./00-foundation.md) | Project scaffold, config, DB schema, interfaces, CLI, CI | §8 | 0 | Draft |
-| [`01-change-discovery.md`](./01-change-discovery.md) | Version range from the dependency diff; release notes for the range | FR1, FR2 | 1 | Draft |
-| [`03-api-surface-diffing.md`](./03-api-surface-diffing.md) | API diff of old vs new version; confidence and symbol checks | FR2, FR3 | 1 | Draft |
-| [`02-extraction.md`](./02-extraction.md) | Structured extraction (LLM) | FR3 | 1 | Draft |
+| [`01-change-discovery.md`](./01-change-discovery.md) | Change watching, release gate, fan-out, version range | FR1, FR2 | 1 | Draft |
+| [`03-api-surface-diffing.md`](./03-api-surface-diffing.md) | API diff; confidence and symbol checks; API lookup | FR2 | 1 | Draft |
+| [`02-extraction.md`](./02-extraction.md) | Structured extraction (LLM) | FR2 | 1 | Draft |
 | [`04-repo-scanning.md`](./04-repo-scanning.md) | Repository scanning (libcst) | FR4 | 2 | Draft |
-| [`05-fix-generation.md`](./05-fix-generation.md) | Fix generation and the AST guard | FR5 | 3 | Draft |
+| [`05-fix-generation.md`](./05-fix-generation.md) | Bump editor, codemods, single-shot fixer, AST guard | FR5 | 3 | Draft |
 | [`06-verification.md`](./06-verification.md) | Two-phase sandbox verification, levels L1 to L3 | FR6 | 3 | Draft |
-| [`07-github-integration.md`](./07-github-integration.md) | GitHub App: bump-PR trigger, draft fix PR, comment fallback | FR1, FR7 | 4 | Draft |
-| [`09-gcp-deployment.md`](./09-gcp-deployment.md) | Deployment on Google Cloud | §7, §8 | 5 | Draft |
-| [`08-evaluation.md`](./08-evaluation.md) | Evaluation harness and published results | §9, §11 | 1–6 | Draft |
+| [`11-agent-fixer.md`](./11-agent-fixer.md) | Agent fixer: tools, budgets, step logging | FR5 | 4 | Draft |
+| [`07-github-integration.md`](./07-github-integration.md) | GitHub App: installs, upgrade PR, issue fallback | FR7 | 5 | Draft |
+| [`10-api-level-changes.md`](./10-api-level-changes.md) | API-level changes: deprecation notices | FR3 | 5 | Draft |
+| [`09-gcp-deployment.md`](./09-gcp-deployment.md) | Deployment on Google Cloud | §7, §8 | 6 | Draft |
+| [`08-evaluation.md`](./08-evaluation.md) | Evaluation harness and published results | §9, §11 | 1–7 | Draft |
 
-Cross-cutting rules (apply to **all** specs, from PRD v2 §7):
+Cross-cutting rules (apply to **all** specs, from PRD v3 §7):
 
-- Never push to the default branch or to the bump branch; fix PRs are always drafts;
-  a human merges.
-- Every run has an explicit old → new version range. Nothing is fixed, scanned or
-  reported outside a run.
-- Three inputs reach an LLM and **all three are untrusted**: release notes, repository
-  code and comments, and test output fed back on retry. They are data, never
-  instructions. No LLM call has tools.
-- Every LLM call goes through the shared client and is logged to `llm_calls`
-  (inputs, outputs, tokens, latency, cost).
-- Runs are idempotent, keyed on (repo, package, target version, head SHA). Retries use
+- Never push to the default branch; PRs are always drafts; a human merges.
+- A fix always ships with its version: SDK fixes go in the same commit as the bump.
+- Four inputs reach a model and **all are untrusted**: release notes, provider web
+  pages, repository code and comments, and tool or test output. They are data, never
+  instructions.
+- **Extraction has no tools.** The **agent fixer** has a fixed allow-list of tools
+  (spec 11): no shell, no network, no GitHub, no write access.
+- Every model-written diff passes the AST guard (spec 05) before it is used.
+- Every LLM call and every agent step is logged.
+- Runs are idempotent, keyed on (repo, target, default-branch commit). Retries use
   backoff; GitHub secondary rate limits are handled.
-- No findings means no output: no PR, no comment.
+- No findings means no output: no PR, no issue.
+- Deterministic first: a model is used only where no deterministic tool does the job.
 - The whole pipeline runs from the CLI with no GitHub App and no cloud resources.
 
 ---
 
 ## 3. Implementation phases
 
-Phases map to PRD v2's 6-week timeline. A phase has explicit **exit** criteria; do not
+Phases map to PRD v3's 7-week timeline. A phase has explicit **exit** criteria; do not
 start the next phase until they are met, or a descope decision is recorded in the
 affected spec's "Open questions / decisions".
 
 ### Phase 0 — Foundation (days 1–2)
-**Goal:** repo, tooling, data model and interfaces ready.
 - Specs: [`00-foundation.md`](./00-foundation.md)
 - **Exit:** one command sets up a local environment; migrations create all tables on
-  SQLite; CI runs lint, types and tests on every push; `guardian --help` works.
+  SQLite; CI runs lint, types and tests; `guardian --help` works.
 
 ### Phase 1 — Know the changes (week 1)
-**Goal:** for a package and a version range, a checked list of change records exists.
 - Specs: [`01-change-discovery.md`](./01-change-discovery.md),
   [`03-api-surface-diffing.md`](./03-api-surface-diffing.md),
   [`02-extraction.md`](./02-extraction.md)
-- **Exit:** the range is read from a dependency-file diff; release notes for the range
-  are fetched and cached with revisions; the griffe diff of old vs new runs; extraction
-  emits schema-valid records and rejects bad evidence quotes; each record carries a
-  confidence; the 30-note extraction eval runs.
+- **Exit:** `guardian poll` detects a new release, stores its note, extracts change
+  records and applies the release gate; for a package and a version range, a checked
+  list of change records with confidence exists; the 30-note extraction eval runs.
 
 ### Phase 2 — Know the repo (week 2)
-**Goal:** for a set of change records and a repo, correct call-site findings or silence.
 - Specs: [`04-repo-scanning.md`](./04-repo-scanning.md)
-- **Exit:** scanner resolves imports, aliases and client variables; ignore rules work;
-  no findings ends the run silently; fixture repos exist; scanner eval runs with the
-  grep baseline; a 500-file repo scans in under 30 seconds.
+- **Exit:** the pinned version is read from a repo; the scanner resolves imports,
+  aliases and client variables; no findings ends the run silently; fixture repos
+  exist; scanner eval runs with the grep baseline.
 
 ### Phase 3 — Fix and verify (week 3)
-**Goal:** `guardian run` works end to end on a local repo.
 - Specs: [`05-fix-generation.md`](./05-fix-generation.md),
   [`06-verification.md`](./06-verification.md)
-- **Exit:** codemods handle renames and import changes; every LLM diff passes the AST
-  guard or is rejected; the two-phase sandbox reports a verification level; the CLI
-  prints the result a PR would contain.
+- **Exit:** `guardian run` produces a patch with bump and fix for codemod and
+  single-shot cases; every model-written diff passes the AST guard or is rejected; the
+  sandbox reports a verification level.
 
-### Phase 4 — GitHub App (week 4)
-**Goal:** a real bump PR produces a draft fix PR or a comment.
-- Specs: [`07-github-integration.md`](./07-github-integration.md)
-- **Exit:** the App runs locally behind a webhook tunnel; opens a draft fix PR based on
-  the bump branch; falls back to one comment; comment-only mode works; closed fix PRs
-  are not reopened; the fix eval runs.
+### Phase 4 — Agent fixer (week 4)
+- Specs: [`11-agent-fixer.md`](./11-agent-fixer.md)
+- **Exit:** the agent fixes findings no codemod handles, within budget, with every
+  step logged; the fix eval compares codemods, single-shot and agent.
 
-### Phase 5 — Google Cloud (week 5)
-**Goal:** the same pipeline runs hosted on GCP.
+### Phase 5 — GitHub App and API-level changes (week 5)
+- Specs: [`07-github-integration.md`](./07-github-integration.md),
+  [`10-api-level-changes.md`](./10-api-level-changes.md)
+- **Exit:** installing the App on a test repo starts a catch-up run; a release that
+  affects the repo produces a draft upgrade PR; the issue fallback and closed-PR
+  memory work; one deprecation notice produces a PR or issue end to end.
+
+### Phase 6 — Google Cloud (week 6)
 - Specs: [`09-gcp-deployment.md`](./09-gcp-deployment.md)
-- **Exit:** one script deploys everything; a bump PR on a test repo produces a fix PR
-  through the deployed app; the metadata-server canary passes; a budget alert exists.
+- **Exit:** one script deploys everything; the daily poll runs from Cloud Scheduler; a
+  real release produces a PR through the deployed app; the metadata canary passes.
 
-### Phase 6 — Prove it (week 6)
-**Goal:** publish eval numbers, README and demo.
+### Phase 7 — Prove it (week 7)
 - Specs: [`08-evaluation.md`](./08-evaluation.md)
-- **Exit:** all four evals run with published results; README results table is filled
-  from eval output; demo video recorded; grep vs libcst chart in the README.
+- **Exit:** all evals run with published results; README results are generated from
+  eval output; demo video recorded.
 
-Cut order if time runs short (PRD v2 §10): stripe-python first, then L3 test
-verification, then comment-only mode. If Phase 5 slips, Cloud SQL is replaced by
-SQLite on the worker VM's disk.
+Cut order if time runs short (PRD v3 §10): stripe-python first, then L3 test
+verification, then API-level auto-fix (report by issue only), then Cloud SQL (SQLite
+on the worker VM).
 
 ---
 
@@ -128,18 +133,23 @@ SQLite on the worker VM's disk.
 
 ```mermaid
 flowchart LR
-    S00["00 Foundation"] --> S01["01 Change discovery"]
+    S00["00 Foundation"] --> S01["01 Change watching"]
     S01 --> S03["03 API diff"]
     S01 --> S02["02 Extraction"]
     S03 --> S02
     S02 --> S04["04 Repo scanning"]
     S03 --> S04
     S04 --> S05["05 Fix generation"] --> S06["06 Verification"]
-    S06 --> S07["07 GitHub integration"] --> S09["09 GCP deployment"]
-    S02 --> S08["08 Evaluation"]
-    S04 --> S08
-    S06 --> S08
-    S09 --> S08
+    S05 --> S11["11 Agent fixer"]
+    S06 --> S11
+    S06 --> S07["07 GitHub integration"]
+    S11 --> S07
+    S02 --> S10["10 API-level changes"]
+    S04 --> S10
+    S07 --> S10
+    S07 --> S09["09 GCP deployment"]
+    S10 --> S09
+    S09 --> S08["08 Evaluation"]
 ```
 
 ---
@@ -151,7 +161,7 @@ Copy this for new specs:
 ```markdown
 # Spec NN — <Feature name>
 Status: Draft | Approved | In progress | Implemented | Verified
-Phase: N · PRD v2 ref: FRn · Depends on: specs …
+Phase: N · PRD v3 ref: FRn · Depends on: specs …
 
 ## Goal
 One paragraph: what this delivers and why it matters.
@@ -181,18 +191,22 @@ Unresolved items and any descope decisions (with dates).
 
 ---
 
-## 6. What changed from the v1 specs (2026-11-13)
+## 6. What changed from the v2 specs (2026-11-13)
 
-| v1 spec | v2 spec |
-|---|---|
-| 01 Ingestion: daily poll of 3 SDKs, dedup on content hash | 01 Change discovery: on-demand fetch for one version range, cached by package and version with revisions. File renamed from `01-ingestion.md` |
-| 02 Extraction: model reports its own confidence; verbatim evidence check | Confidence is assigned by the system from the API diff; evidence check normalises whitespace and Markdown; `fixable` flag added |
-| 03 API diff: consecutive versions; diff overrides the LLM and rejects records | Exact old vs new version; diff-confirmed records are high confidence, notes-only records are kept at medium |
-| 04 Scanning: tree-sitter; version gating against the pinned version | libcst with metadata providers; no gating, the run's range decides; ignore rules added |
-| 05 Fix: diff size cap and file scope | Adds the AST guard on every LLM diff and a report-only path for non-fixable changes |
-| 06 Verification: one offline Docker run; pass or fail | Two phases (install with PyPI-only network, run offline); levels L1 to L3; baseline run; "could not run" |
-| 07 GitHub: installation webhooks; one PR per change; issue on failure; Issues permission | Triggered by Dependabot or Renovate bump PRs; one draft fix PR per bump PR, based on the bump branch; comment on failure; comment-only mode; no Issues or Workflows permission |
-| 08 Evaluation: 40–50 notes, 15–20 real repos, alerts per month | 30 notes, 6–8 real repos plus about 30 fixture cases, false-alert rate |
-| — | 09 GCP deployment (new) |
-| Postgres + Redis + RQ via docker compose | SQLite locally; Cloud Run, Pub/Sub, a worker VM and Cloud SQL when deployed |
-| 3 providers, 3 weeks | 2 providers (openai, stripe), 6 weeks |
+v3 returns the product to its source idea (YC's "Self-Maintaining APIs"): act when the
+provider ships a change, cover API-level changes, and fix with a real agent.
+
+| Area | v2 spec | v3 spec |
+|---|---|---|
+| Trigger | A Dependabot or Renovate bump PR (spec 07) | A daily poll detects provider changes and fans out one run per installed repo (spec 01) |
+| Version range | Read from the bump PR's dependency-file diff | Old = the repo's pinned version on the default branch; new = the latest release |
+| Output | Fix PR stacked on the bump branch; comment fallback | One draft upgrade PR with bump and fix against the default branch; issue fallback (spec 07) |
+| Fixer | Codemods, then one LLM call (spec 05) | Codemods, then an agent with tools (new spec 11); single-shot kept as the eval baseline |
+| Change sources | SDK release notes only | Adds provider deprecation pages (new spec 10) |
+| Permissions | Contents, Pull requests, Metadata | Adds Issues; still no Workflows |
+| GCP | Cloud Run, Pub/Sub, worker VM | Adds Cloud Scheduler and a pause switch (spec 09) |
+| Evaluation | Four evals | Adds the codemod vs single-shot vs agent comparison (spec 08) |
+| Timeline | 6 weeks | 7 weeks |
+
+Unchanged: griffe API diff, evidence and symbol checks, libcst scanner, AST guard,
+two-phase sandbox with levels L1 to L3.

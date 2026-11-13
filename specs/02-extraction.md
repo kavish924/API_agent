@@ -1,5 +1,5 @@
 # Spec 02 — Structured extraction
-Status: Draft · Phase: 1 · PRD v2 ref: FR3 · Depends on: 00-foundation, 01-change-discovery
+Status: Draft · Phase: 1 · PRD v3 ref: FR2 · Depends on: 00-foundation, 01-change-discovery
 
 ## Goal
 Convert each stored release note into validated **change records** using an LLM with a
@@ -40,12 +40,17 @@ it must not depend on any one run.
   whitespace to one space; strip Markdown emphasis markers (`*`, `_`, backticks);
   strip leading list and heading markers; compare case-sensitively. Anything looser
   weakens the guard.
-- The **symbol-exists check** from PRD v2 FR3 is applied per run in spec 03 (F3.7),
+- The **symbol-exists check** from PRD v3 FR2 is applied per run in spec 03 (F3.7),
   not here. Extraction is cached across repos, and whether a symbol exists depends on
   the run's old version.
 - Use the provider's structured-output mode; low temperature.
-- `deprecated` records never trigger output on their own. They are listed in a fix PR
-  that is being opened anyway (spec 07).
+- `deprecated` records pass the release gate (F1.7). When the record names a
+  replacement that exists in the new version, the finding is fixed like a rename; the
+  PR lists it as a deprecation, not a break.
+- The result of this spec feeds the release gate: a note whose list is empty starts no
+  runs.
+- The evidence check (F2.5) and the no-tools rule (F2.6) are reused unchanged for
+  provider pages in spec 10.
 
 ## Test plan
 - Unit: schema validation paths (F2.1 to F2.4); normalisation and evidence check
@@ -61,6 +66,8 @@ it must not depend on any one run.
 ## Open questions / decisions
 - Which Vertex AI model (Claude or Gemini)? Decide by end of Phase 1 from eval
   precision and cost per note.
+- 2026-11-13 (v3): extraction now also drives the release gate, and deprecations with a
+  replacement are fixable. Extraction stays tool-free; only the fixer is an agent.
 - 2026-11-13: `affected_versions`, `breaking_flag`, `sunset_date` and model-reported
   `confidence` are removed from the v1 schema; `version`, `fixable`,
   `affected_parameter` and `migration_hint` are added.
