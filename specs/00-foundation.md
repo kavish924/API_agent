@@ -1,9 +1,8 @@
 # Spec 00 — Foundation
-Status: Implemented · Phase: 0 · PRD v3 ref: §8 · Depends on: —
+Status: Verified · Phase: 0 · PRD v3 ref: §8 · Depends on: —
 
-> Implemented 2026-11-13. Moves to `Verified` once CI is green on GitHub, which also
-> runs the suite against Postgres (not run locally: no Postgres or Docker on the dev
-> machine).
+> Verified 2026-11-13: CI green on GitHub (run 43411603849) for Python 3.11, Python 3.12
+> and Postgres 16.
 
 ## Goal
 Stand up the project skeleton so every later spec builds on stable ground: package
@@ -52,11 +51,11 @@ Confidence is per run, because it depends on the run's API diff; it is stored on
 ## Acceptance criteria
 - [x] One documented command (`python scripts/dev.py`, or `make dev`) creates the environment and a SQLite database, and `pytest` passes. Checked on a fresh copy of the repo.
 - [x] Running migrations on a fresh database creates all nine tables; a second run is a no-op. (`tests/test_db.py`)
-- [ ] The same test suite passes with `DATABASE_URL` pointing at SQLite and at Postgres. SQLite passes locally; the Postgres job is in CI and has not run yet.
+- [x] The same test suite passes with `DATABASE_URL` pointing at SQLite and at Postgres. Postgres 16 checked in CI.
 - [x] A smoke test calls the shared LLM client against the stub, once for structured output and once with a tool call, and asserts the `llm_calls` rows. (`tests/test_llm.py`)
 - [x] `guardian --help` lists `poll`, `run` and `ingest`. (`tests/test_pipeline.py`)
 - [x] With the pause flag set, a delivery attempt writes nothing and records `paused`. (`tests/test_pipeline.py`)
-- [ ] `ruff` and `mypy` pass with zero errors in CI. Both pass locally (mypy in strict mode); CI has not run yet.
+- [x] `ruff` and `mypy` pass with zero errors in CI (mypy in strict mode).
 
 ## Technical notes
 - No Redis, RQ or Celery, and no docker compose for services. Docker is needed only

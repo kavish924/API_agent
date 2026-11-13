@@ -37,7 +37,7 @@ spec drafted → reviewed → implemented → verified against acceptance criter
 
 | Spec | Feature | PRD v3 ref | Phase | Status |
 |---|---|---|---|---|
-| [`00-foundation.md`](./00-foundation.md) | Project scaffold, config, DB schema, interfaces, CLI, CI | §8 | 0 | Draft |
+| [`00-foundation.md`](./00-foundation.md) | Project scaffold, config, DB schema, interfaces, CLI, CI | §8 | 0 | Verified |
 | [`01-change-discovery.md`](./01-change-discovery.md) | Change watching, release gate, fan-out, version range | FR1, FR2 | 1 | Draft |
 | [`03-api-surface-diffing.md`](./03-api-surface-diffing.md) | API diff; confidence and symbol checks; API lookup | FR2 | 1 | Draft |
 | [`02-extraction.md`](./02-extraction.md) | Structured extraction (LLM) | FR2 | 1 | Draft |

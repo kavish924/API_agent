@@ -45,7 +45,7 @@ If time is short, protect those two.
 - [x] Package layout: `guardian/` with stage packages incl. `agent/` and `apilevel/`; `evals/`, `tests/`, `deploy/` [F0.1]
 - [x] Config from environment; `.env.example` committed; `.env` in `.gitignore` [F0.2]
 - [x] Alembic migrations create the nine tables [F0.3]
-- [ ] SQLAlchemy layer works on SQLite and Postgres with only `DATABASE_URL` changed [F0.4] — SQLite verified; Postgres runs in CI
+- [x] SQLAlchemy layer works on SQLite and Postgres with only `DATABASE_URL` changed [F0.4]
 - [x] `pipeline.poll()` and `pipeline.run()` as plain functions; in-process `JobQueue` with `poll`, `run`, `event` jobs [F0.5]
 - [x] Shared LLM client with structured output and tool use; scriptable stub; every call writes an `llm_calls` row [F0.6]
 - [x] `BlobStore` interface with local-directory implementation [F0.7]
@@ -58,8 +58,8 @@ If time is short, protect those two.
 **Exit**
 - [x] One command sets up a local environment and `pytest` passes (`python scripts/dev.py`, checked on a fresh copy)
 - [x] Migrations run twice with no error
-- [ ] CI is green — needs a push
-- [ ] Spec 00 marked `Verified` — after CI is green
+- [x] CI is green (Python 3.11, 3.12 and Postgres)
+- [x] Spec 00 marked `Verified`
 
 ---
 
