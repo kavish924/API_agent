@@ -29,10 +29,11 @@ If time is short, protect those two.
 ## Pre-phase — before writing code
 
 - [ ] Read specs 00, 01, 03 and 02; edit what you disagree with; mark them `Approved`
-- [ ] Spike: diff two real `openai` version pairs with griffe; note load time
-- [ ] Spike: list the real breaking changes in `openai` and `stripe` by hand; count fixable (renames, removals) vs report-only (response shape, behaviour)
-- [ ] Spike: fetch OpenAI's deprecations page with a plain HTTP client; check the text is stable enough to diff
-- [ ] Decide: keep both providers, or swap one if fixable changes are too few
+- [x] Spike: diff two real `openai` version pairs with griffe; note load time — [report](docs/spikes/2026-11-13-pre-phase-spike.md)
+- [x] Spike: list the real breaking changes in `openai` and `stripe` by hand; count fixable (renames, removals) vs report-only (response shape, behaviour)
+- [x] Spike: fetch OpenAI's deprecations page with a plain HTTP client; check the text is stable enough to diff
+- [ ] Decide: keep both providers, or swap one if fixable changes are too few — spike recommends keeping both (Stripe supplies the SDK renames)
+- [x] Apply the spike's changes to specs 01, 02, 03, 04 and 10 before approving them
 - [ ] Decide how the LLM is reached in weeks 1–5: Vertex AI from day one, or a direct API key until week 6
 - [ ] Confirm the chosen model supports tool use and structured output
 - [ ] Start a list of candidate real repos for the scanner eval (need 6–8, pinned just before a known break)
@@ -74,7 +75,9 @@ If time is short, protect those two.
 - [ ] Parsers for `requirements*.txt`, `pyproject.toml`, `poetry.lock`, `uv.lock` [F1.10]
 - [ ] Old = pinned version (lock wins); new = latest release [F1.11]
 - [ ] Silent end reasons: `package-not-used`, `version-not-pinned`, `up-to-date` [F1.12]
-- [ ] Notes for (old, new] fetched on demand and cached; gaps recorded [F1.13, F1.14]
+- [ ] Notes for (old, new] fetched on demand and cached [F1.13]
+- [ ] `CHANGELOG.md` fallback when a release body is empty or only a link; regression on Stripe 16.0.0 [F1.14]
+- [ ] Gaps recorded when neither source has the version [F1.17]
 
 ### API diff and reconciliation (spec 03)
 - [ ] Fetch wheels from PyPI and load them statically; nothing is executed [F3.1]
@@ -85,6 +88,12 @@ If time is short, protect those two.
 - [ ] Diff-only records for unannounced removals [F3.9]
 - [ ] Gate diff: new release vs the one before it [F3.11]
 - [ ] `lookup(version, symbol)` for the agent [F3.12]
+- [ ] Own comparison on griffe's loader, not `find_breaking_changes`; aliases followed into private modules [F3.2, F3.3, F3.13]
+- [ ] `TypedDict` params keys compared [F3.14]
+- [ ] Rename candidates paired from removed + added names [F3.4]
+- [ ] Noise filter (placeholder defaults, class-to-alias in types modules), counted by rule [F3.15]
+- [ ] Regression: Stripe 15.6.2 → 16.0.0 finds the `Reversal` rename, `request` removals and positional-only params
+- [ ] Measure the noise filter on consecutive single `openai` releases before trusting the gate
 
 ### Extraction (spec 02)
 - [ ] Change-record schema and `change_type` enum [F2.1, F2.2]
@@ -93,6 +102,10 @@ If time is short, protect those two.
 - [ ] Evidence check with the documented normalisation [F2.5]
 - [ ] No tools; note passed as delimited data [F2.6]
 - [ ] Cached per (package, version, revision) [F2.7]
+- [ ] All three note formats: headings, inline ⚠️, `CHANGELOG.md` sections [F2.11]
+- [ ] ⚠️ on an addition yields no record; unmarked "Remove support for" does [F2.12]
+- [ ] Dependency changes kept as `behavior-changed` (e.g. `openai` 3.0.0 `http_client`) [F2.13]
+- [ ] Real-format fixtures stored: `openai` 2.0.0 and 3.0.0, `stripe` 9.0.0, 13.0.0, 16.0.0
 
 ### Evaluation started (spec 08)
 - [ ] 30 release notes hand-labeled **before** running the model on them [F8.1]
@@ -117,6 +130,7 @@ If time is short, protect those two.
 - [ ] Same-file client tracking and attribute-chain resolution [F4.3] — expect this to take most of the week
 - [ ] One-hop cross-module client, tagged separately [F4.4]
 - [ ] Parameter check: finding only when the keyword is passed [F4.5]
+- [ ] `TypedDict` key matching: keyword arguments and dict-literal keys [F4.13]
 - [ ] Default skips and `.guardianignore` [F4.6]
 - [ ] Findings with file, line, symbol, tier, confidence [F4.7]
 - [ ] No findings ends the run silently [F4.8]
@@ -222,10 +236,14 @@ If time is short, protect those two.
 
 ### API-level changes (spec 10)
 - [ ] Spec 10 marked `Approved`
-- [ ] `api-page` source: fetch, reduce to text, hash, snapshot revisions [F10.1, F10.2]
-- [ ] Only new or changed entries go to extraction [F10.3]
-- [ ] Extraction schema with shutdown date and evidence check [F10.4, F10.5]
-- [ ] Literal-argument matching in the scanner, incl. module-level constants [F4.12, F10.8]
+- [ ] `api-page` source: fetch the `.md` version with conditional requests; snapshot revisions [F10.1, F10.2]
+- [ ] Table parser in plain code; only new or changed rows go further [F10.3]
+- [ ] Record schema with `api_family`, `replacement_kind`, shutdown date; LLM only for prose cells [F10.4, F10.5]
+- [ ] API-family prefix table as reviewed config [F10.15]
+- [ ] Fixable only for a single same-family replacement; everything else report-only [F10.16]
+- [ ] Literal-argument matching with the method's API family, incl. module-level constants [F4.12, F10.8]
+- [ ] Real snapshot fixture (2026-11-13): 34 rows, 52 IDs; the five worked cases in spec 10
+- [ ] Demo: `gpt-5` retires 2026-12-11, before this phase; use a later retirement or replay the stored snapshot
 - [ ] Possible usages in non-Python files listed, never edited [F10.9]
 - [ ] Literal-replacement fix; no version bump [F10.10]
 - [ ] Behaviour-change label and shutdown date on every such PR [F10.12, F10.13]

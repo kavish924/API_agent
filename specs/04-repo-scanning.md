@@ -27,7 +27,8 @@ and low noise are the product.
 | F4.9 | A file that fails to parse is skipped with a logged warning; the scan continues |
 | F4.10 | A 500-file repo scans in under 30 seconds on a cold cache. Files that do not mention the package name are skipped before parsing |
 | F4.11 | Findings are written to the database before fix generation starts |
-| F4.12 | **Literal-argument matching** (used by spec 10): find calls on a resolved SDK symbol that pass a given string literal to a named argument, for example `model="…"`. A module-level constant in the same file, used one step away, also matches, and the finding points at the constant |
+| F4.12 | **Literal-argument matching** (used by spec 10): find calls on a resolved SDK method that pass a given string literal to a named argument, for example `model="…"`. A module-level constant in the same file, used one step away, also matches, and the finding points at the constant. Each match records the method's **API family** (spec 10 F10.15), from a reviewed map of SDK resource paths to families (for example `chat.completions.create` → `chat`, `audio.speech.create` → `audio.speech`) |
+| F4.13 | **`TypedDict` key matching** (for spec 03 F3.14): a removed or renamed params key is found when passed (a) as a keyword argument to a method that takes that params type as `**params` (Stripe style), or (b) as a key of a dict literal passed to the argument typed with it, one level deep, including dicts inside a list literal (for example `tools=[{"type": …, "display_width": …}]`) |
 
 ## Acceptance criteria
 - [ ] GIVEN `from openai import OpenAI as OAI` and `OAI().chat.completions.create(...)`, WHEN scanning for a change on that method, THEN the call is found through the alias.
@@ -38,6 +39,8 @@ and low noise are the product.
 - [ ] GIVEN a Python file with a syntax error, THEN it is skipped with a warning and other files are scanned.
 - [ ] GIVEN a local function named `create` unrelated to the SDK, THEN it is not matched (no name-only matching).
 - [ ] GIVEN a search for literal `"X"` on argument `model`, THEN `create(model="X")` on a resolved client matches, and the same string in an unrelated call, a comment or a docstring does not.
+- [ ] GIVEN `client.audio.speech.create(model="tts-1")`, THEN the match records API family `audio.speech`.
+- [ ] GIVEN a removed params key `display_width` and `create(tools=[{"type": "computer", "display_width": 1024}])`, THEN one finding points at that dict key; GIVEN `stripe.Customer.create(coupon="x")` and a removed key `coupon`, THEN one finding points at that keyword.
 - [ ] A 500-file benchmark repo scans in under 30 seconds.
 
 ## Technical notes
@@ -70,6 +73,8 @@ and low noise are the product.
 ## Open questions / decisions
 - Is a positional argument ever affected by a parameter rename in the two SDKs? If
   yes, F4.5 needs a positional rule. Check during Phase 2.
+- 2026-11-13 (spike): API family recorded on literal matches (F4.12) and `TypedDict`
+  key matching added (F4.13), following from the spike's changes to specs 03 and 10.
 - 2026-11-13 (v3): the scan target is the default branch head, not a bump branch;
   literal-argument matching added for API-level changes.
 - 2026-11-13: tree-sitter replaced by libcst; version gating removed; target changed
