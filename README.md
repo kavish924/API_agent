@@ -238,8 +238,3 @@ Dependabot PR, type-aware scanning with Pyright, Stripe dated API versions.
 | [`docs/tech-stack.md`](docs/tech-stack.md) | Every library and service and why it was chosen |
 | [`docs/architecture.md`](docs/architecture.md) | Diagrams: overview, sequence, agent loop, data model, trust boundaries, deployment |
 | [`specs/`](specs/README.md) | One spec per feature with numbered requirements, acceptance criteria and the phase plan |
-
----
-
-Built by [Kavish](https://github.com/kavish924) as an agentic-AI engineering portfolio
-project.
