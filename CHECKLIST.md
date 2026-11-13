@@ -42,24 +42,24 @@ If time is short, protect those two.
 
 ## Phase 0 — Foundation (days 1–2)
 
-- [ ] Package layout: `guardian/` with stage packages incl. `agent/` and `apilevel/`; `evals/`, `tests/`, `deploy/` [F0.1]
-- [ ] Config from environment; `.env.example` committed; `.env` in `.gitignore` [F0.2]
-- [ ] Alembic migrations create the nine tables [F0.3]
-- [ ] SQLAlchemy layer works on SQLite and Postgres with only `DATABASE_URL` changed [F0.4]
-- [ ] `pipeline.poll()` and `pipeline.run()` as plain functions; in-process `JobQueue` with `poll`, `run`, `event` jobs [F0.5]
-- [ ] Shared LLM client with structured output and tool use; scriptable stub; every call writes an `llm_calls` row [F0.6]
-- [ ] `BlobStore` interface with local-directory implementation [F0.7]
-- [ ] Structured JSON logging with a run ID [F0.8]
-- [ ] Retry-with-backoff HTTP helper [F0.9]
-- [ ] `guardian` CLI skeleton: `poll`, `run`, `ingest` [F0.10]
-- [ ] CI on every push: ruff, mypy, pytest [F0.11]
-- [ ] Global pause flag checked before any GitHub write [F0.12]
+- [x] Package layout: `guardian/` with stage packages incl. `agent/` and `apilevel/`; `evals/`, `tests/`, `deploy/` [F0.1]
+- [x] Config from environment; `.env.example` committed; `.env` in `.gitignore` [F0.2]
+- [x] Alembic migrations create the nine tables [F0.3]
+- [ ] SQLAlchemy layer works on SQLite and Postgres with only `DATABASE_URL` changed [F0.4] — SQLite verified; Postgres runs in CI
+- [x] `pipeline.poll()` and `pipeline.run()` as plain functions; in-process `JobQueue` with `poll`, `run`, `event` jobs [F0.5]
+- [x] Shared LLM client with structured output and tool use; scriptable stub; every call writes an `llm_calls` row [F0.6]
+- [x] `BlobStore` interface with local-directory implementation [F0.7]
+- [x] Structured JSON logging with a run ID [F0.8]
+- [x] Retry-with-backoff HTTP helper [F0.9]
+- [x] `guardian` CLI skeleton: `poll`, `run`, `ingest`, plus `migrate` [F0.10]
+- [x] CI workflow written: ruff, mypy, pytest on SQLite (3.11, 3.12) and Postgres [F0.11]
+- [x] Global pause flag; `deliver()` is the single gate for GitHub writes [F0.12]
 
 **Exit**
-- [ ] One command sets up a local environment and `pytest` passes
-- [ ] Migrations run twice with no error
-- [ ] CI is green
-- [ ] Spec 00 marked `Verified`
+- [x] One command sets up a local environment and `pytest` passes (`python scripts/dev.py`, checked on a fresh copy)
+- [x] Migrations run twice with no error
+- [ ] CI is green — needs a push
+- [ ] Spec 00 marked `Verified` — after CI is green
 
 ---
 

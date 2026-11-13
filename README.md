@@ -170,17 +170,26 @@ are met.
 
 ## 🚀 Quick start
 
-*(lands with the Phase 0 and Phase 3 deliverables)*
+Phase 0 (foundation) is in place: the setup, database, CLI and test suite work. The
+pipeline stages report `not-implemented` until their phases land.
 
 ```bash
 git clone https://github.com/kavish924/API_agent.git
 cd API_agent
 cp .env.example .env
-make dev
-guardian run --repo ../some-repo --package openai
+python scripts/dev.py
 ```
 
-Local runs need Python 3.12+ and Docker. Deploying to GCP is scripted in `deploy/`
+`scripts/dev.py` creates `.venv`, installs the project and migrates a local SQLite
+database. Then, with the venv's Python (`.venv\Scripts\python` on Windows,
+`.venv/bin/python` elsewhere):
+
+```bash
+python -m pytest
+python -m guardian.cli --help
+```
+
+Local runs need Python 3.11+. Docker is needed from Phase 3, for the sandbox. Deploying to GCP is scripted in `deploy/`
 (see [`specs/09-gcp-deployment.md`](specs/09-gcp-deployment.md)).
 
 Stack: Python, FastAPI, Pydantic, SQLAlchemy, libcst, griffe, Docker, GitHub App
