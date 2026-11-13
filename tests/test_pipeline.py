@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -110,18 +111,36 @@ def _last_json(output: str) -> dict[str, object]:
     return result
 
 
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(output: str) -> str:
+    """Help text without colour codes.
+
+    Rich colours help output when it thinks it is in CI (for example GITHUB_ACTIONS is
+    set), and it styles `-` and `-repo` separately, so `--repo` never appears in one
+    piece. Stripping the codes makes these checks independent of the environment.
+    """
+    return _ANSI_ESCAPE.sub("", output)
+
+
 def test_help_lists_the_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     for command in ("poll", "run", "ingest", "migrate"):
-        assert command in result.output
+        assert command in _plain(result.output)
 
 
 def test_run_help_lists_its_options() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     for option in ("--repo", "--package", "--from", "--to"):
-        assert option in result.output
+        assert option in _plain(result.output)
+
+
+def test_plain_strips_colour_codes() -> None:
+    coloured = "\x1b[1;36m-\x1b[0m\x1b[1;36m-repo\x1b[0m  \x1b[33mPATH\x1b[0m"
+    assert _plain(coloured) == "--repo  PATH"
 
 
 def test_migrate_then_poll_and_run(cli_env: str, tmp_path: Path) -> None:
