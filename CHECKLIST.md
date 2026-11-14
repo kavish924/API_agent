@@ -70,7 +70,7 @@ If time is short, protect those two.
 - [x] SDK sources configured: `openai`, `stripe` [F1.1]
 - [x] `poll` with ETags; per-source state stored; idempotent [F1.2, F1.3]
 - [x] New release bodies stored byte-for-byte; edits become revisions [F1.4, F1.5]
-- [ ] Release gate: no breaking or deprecating record → no runs [F1.7] — the gate hook and fan-out are built; the verdict itself needs specs 02 and 03
+- [ ] Release gate: no breaking or deprecating record → no runs [F1.7] — the API-diff half is live (`gate: api-diff-only`); the release-note half needs spec 02
 - [x] Fan-out: one run job per active repo [F1.8]
 - [x] Parsers for `requirements*.txt`, `pyproject.toml`, `poetry.lock`, `uv.lock` [F1.10]
 - [x] Old = pinned version (lock wins); new = latest release [F1.11]
@@ -80,19 +80,19 @@ If time is short, protect those two.
 - [x] Gaps recorded when neither source has the version [F1.17]
 
 ### API diff and reconciliation (spec 03)
-- [ ] Fetch wheels from PyPI and load them statically; nothing is executed [F3.1]
-- [ ] Public API surface per version [F3.2]; old vs new diff [F3.3]
-- [ ] Rename inferred from removal plus existing replacement [F3.4]
-- [ ] Surface and diff caches [F3.5]; diff JSON stored [F3.6]
-- [ ] Symbol-exists check [F3.7]; confidence high or medium [F3.8]
-- [ ] Diff-only records for unannounced removals [F3.9]
-- [ ] Gate diff: new release vs the one before it [F3.11]
-- [ ] `lookup(version, symbol)` for the agent [F3.12]
-- [ ] Own comparison on griffe's loader, not `find_breaking_changes`; aliases followed into private modules [F3.2, F3.3, F3.13]
-- [ ] `TypedDict` params keys compared [F3.14]
-- [ ] Rename candidates paired from removed + added names [F3.4]
-- [ ] Noise filter (placeholder defaults, class-to-alias in types modules), counted by rule [F3.15]
-- [ ] Regression: Stripe 15.6.2 → 16.0.0 finds the `Reversal` rename, `request` removals and positional-only params
+- [x] Fetch wheels from PyPI and load them statically; nothing is executed [F3.1]
+- [x] Public API surface per version [F3.2]; old vs new diff [F3.3]
+- [x] Rename inferred from removal plus existing replacement [F3.4]
+- [x] Surface and diff caches [F3.5]; diff JSON stored [F3.6]
+- [x] Symbol-exists check [F3.7]; confidence high or medium [F3.8]
+- [x] Diff-only records for unannounced removals [F3.9]
+- [x] Gate diff: new release vs the one before it [F3.11]
+- [x] `lookup(version, symbol)` for the agent [F3.12]
+- [x] Own comparison on griffe's loader, not `find_breaking_changes`; aliases followed into private modules [F3.2, F3.3, F3.13]
+- [x] `TypedDict` params keys compared [F3.14]
+- [x] Rename candidates paired from removed + added names [F3.4]
+- [x] Noise filter (placeholder defaults, class-to-alias in types modules), counted by rule [F3.15]
+- [x] Regression: Stripe 15.6.2 → 16.0.0 finds the `Reversal` rename, `request` removals and positional-only params
 - [ ] Measure the noise filter on consecutive single `openai` releases before trusting the gate
 
 ### Extraction (spec 02)

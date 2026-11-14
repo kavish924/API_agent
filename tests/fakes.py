@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
+import zipfile
 from typing import Any
 
 import httpx
@@ -107,3 +109,69 @@ class FakeGitHub:
         if request.headers.get("if-none-match") == etag:
             return self._respond(304)
         return self._respond(200, text=text, headers={"ETag": etag})
+
+
+class FakePyPI:
+    """A fake PyPI: the JSON API for one release, and the wheel file it points to."""
+
+    def __init__(self) -> None:
+        self.wheels: dict[tuple[str, str], bytes] = {}
+        self.sdist_only: set[tuple[str, str]] = set()
+        self.corrupt: set[tuple[str, str]] = set()  # served bytes will not match the hash
+        self.requests: list[httpx.Request] = []
+
+    def add_wheel(self, package: str, version: str, files: dict[str, str]) -> None:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            for name, source in files.items():
+                archive.writestr(name, source.lstrip("\n"))
+        self.wheels[(package, version)] = buffer.getvalue()
+
+    def add_raw_wheel(self, package: str, version: str, data: bytes) -> None:
+        self.wheels[(package, version)] = data
+
+    def client(self) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(self.handle))
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        path = request.url.path
+        meta = re.match(r"^/pypi/(?P<package>[^/]+)/(?P<version>[^/]+)/json$", path)
+        if meta:
+            key = (meta["package"], meta["version"])
+            if key in self.sdist_only:
+                return httpx.Response(200, json={"urls": [{"packagetype": "sdist"}]})
+            if key not in self.wheels:
+                return httpx.Response(404, json={"message": "Not Found"})
+            name = f"{key[0]}-{key[1]}-py3-none-any.whl"
+            return httpx.Response(
+                200,
+                json={
+                    "urls": [
+                        {"packagetype": "sdist", "filename": f"{key[0]}-{key[1]}.tar.gz"},
+                        {
+                            "packagetype": "bdist_wheel",
+                            "filename": name,
+                            "url": f"https://files.pythonhosted.org/packages/{name}",
+                            "digests": {"sha256": hashlib.sha256(self.wheels[key]).hexdigest()},
+                        },
+                    ]
+                },
+            )
+        wheel = re.match(r"^/packages/(?P<package>.+)-(?P<version>[^-]+)-py3-none-any\.whl$", path)
+        if wheel and (wheel["package"], wheel["version"]) in self.wheels:
+            key = (wheel["package"], wheel["version"])
+            data = self.wheels[key]
+            return httpx.Response(200, content=data + b"x" if key in self.corrupt else data)
+        return httpx.Response(404, json={"message": "Not Found"})
+
+
+def combined_client(github: FakeGitHub, pypi: FakePyPI) -> httpx.Client:
+    """One HTTP client that routes by host, like the real one the app uses."""
+
+    def route(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            return github._handle(request)
+        return pypi.handle(request)
+
+    return httpx.Client(transport=httpx.MockTransport(route))

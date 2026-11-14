@@ -1,5 +1,10 @@
 # Spec 03 — API-surface diffing and reconciliation
-Status: Draft · Phase: 1 · PRD v3 ref: FR2 · Depends on: 00-foundation, 01-change-discovery; reconciliation consumes 02-extraction
+Status: Implemented · Phase: 1 · PRD v3 ref: FR2 · Depends on: 00-foundation, 01-change-discovery; reconciliation consumes 02-extraction
+
+> Approved by instruction on 2026-11-14 ("Build spec 03") and implemented the same day.
+> Moves to `Verified` once two things are done: the noise filter is measured on
+> consecutive single releases, and reconciliation runs inside `guardian run` on real
+> extracted records, which needs spec 02.
 
 ## Goal
 Diff the public API surface of the run's exact old and new SDK versions with
@@ -33,20 +38,20 @@ records about symbols that never existed are dropped.
 | F3.15 | **Noise filter**, applied before the gate (F3.11) and before diff-only records (F3.9): ignore a parameter default that changes from one "not given" placeholder to another; ignore a public class that becomes a type alias of the same name in a generated types module; ignore changes on names under `types` modules that are only used as return types. Every ignored change is counted by rule in the diff JSON (F3.6) |
 
 ## Acceptance criteria
-- [ ] GIVEN fixture versions `1.2.0` and `1.3.0` where `Client.create(engine=)` became `Client.create(model=)`, THEN the diff reports the parameter change and the matching record is `high`.
-- [ ] GIVEN a record for a narrowed literal value that the diff cannot see, THEN the record is kept with confidence `medium`.
-- [ ] GIVEN a record naming `Client.does_not_exist`, THEN it is dropped with `symbol-not-in-old-version`.
-- [ ] GIVEN `Client.old` removed and a record with `replacement: Client.new` that exists in the new surface, THEN the change is classed as a rename.
-- [ ] GIVEN a removed symbol no release note mentions, THEN a `source: diff` record exists for it.
-- [ ] GIVEN two runs over the same version pair, THEN PyPI is contacted only for the first.
-- [ ] GIVEN a new release that removes a public symbol its notes do not mention, THEN the release passes the gate.
-- [ ] GIVEN `lookup("1.3.0", "Client.create")`, THEN the signature and docstring of that version are returned; an unknown symbol returns a clear "not found".
-- [ ] A canary fixture package whose `__init__` raises on import loads without error, proving nothing is executed.
-- [ ] GIVEN a fixture package that exports `Reversal` from `pkg._reversal` through `pkg/__init__.py`, and a new version that exports `TransferReversal` instead, THEN `Reversal` is reported removed and paired with `TransferReversal` as a rename candidate.
-- [ ] GIVEN a public method on an aliased class whose path parameter changes from positional-or-keyword to positional-only, THEN a parameter-kind change is reported.
-- [ ] GIVEN a `TypedDict` params class that loses the key `payment_method_types`, THEN a key removal is reported for that class.
-- [ ] GIVEN only placeholder-default changes and class-to-alias changes in a types module, THEN the filtered diff is empty, the release does not pass the gate, and the diff JSON counts each ignored change by rule.
-- [ ] **Regression against real data:** Stripe 15.6.2 → 16.0.0 reports the `Reversal` rename candidate, `request` removed from public resource classes, and positional-only path parameters (the spike found 1, 88 and 652 respectively).
+- [x] GIVEN fixture versions `1.2.0` and `1.3.0` where `Client.create(engine=)` became `Client.create(model=)`, THEN the diff reports the parameter change and the matching record is `high`.
+- [x] GIVEN a record for a narrowed literal value that the diff cannot see, THEN the record is kept with confidence `medium`.
+- [x] GIVEN a record naming `Client.does_not_exist`, THEN it is dropped with `symbol-not-in-old-version`.
+- [x] GIVEN `Client.old` removed and a record with `replacement: Client.new` that exists in the new surface, THEN the change is classed as a rename.
+- [x] GIVEN a removed symbol no release note mentions, THEN a `source: diff` record exists for it.
+- [x] GIVEN two runs over the same version pair, THEN PyPI is contacted only for the first.
+- [x] GIVEN a new release that removes a public symbol its notes do not mention, THEN the release passes the gate.
+- [x] GIVEN `lookup("1.3.0", "Client.create")`, THEN the signature and docstring of that version are returned; an unknown symbol returns a clear "not found".
+- [x] A canary fixture package whose `__init__` raises on import loads without error, proving nothing is executed.
+- [x] GIVEN a fixture package that exports `Reversal` from `pkg._reversal` through `pkg/__init__.py`, and a new version that exports `TransferReversal` instead, THEN `Reversal` is reported removed and paired with `TransferReversal` as a rename candidate.
+- [x] GIVEN a public method on an aliased class whose path parameter changes from positional-or-keyword to positional-only, THEN a parameter-kind change is reported.
+- [x] GIVEN a `TypedDict` params class that loses the key `payment_method_types`, THEN a key removal is reported for that class.
+- [x] GIVEN only placeholder-default changes and class-to-alias changes in a types module, THEN the filtered diff is empty, the release does not pass the gate, and the diff JSON counts each ignored change by rule.
+- [x] **Regression against real data:** Stripe 15.6.2 → 16.0.0 reports the `Reversal` rename candidate, `request` removed from public resource classes, and positional-only path parameters (the spike found 1, 88 and 652 respectively). *Run locally on 2026-11-14 against real wheels: 1 rename candidate, `request` once covering 200 public paths, 1,034 parameters. The counts are higher than the spike's because the whole public surface is walked, not only top-level names. Skipped in CI, which has no wheels.*
 
 ## Technical notes
 - Fetch the wheel file directly through the PyPI JSON API, unzip it, and point griffe
@@ -87,6 +92,35 @@ records about symbols that never existed are dropped.
 - Runtime or behavioural differences; only the symbol surface.
 
 ## Open questions / decisions
+- 2026-11-14 (implementation): a version's API is reduced to a **surface**: a small
+  model of public names, classes, methods, parameters and `TypedDict` keys, cached as
+  JSON in the blob store (about 4–5 MB per version for Stripe and openai). Comparison,
+  lookup and reconciliation work from that model; griffe is needed only to build it.
+- 2026-11-14 (implementation): identity is the **public path**. A class that moves
+  between private modules but keeps its public name is unchanged. Each change is
+  reported once, on the canonical symbol that declares it, with every public path it
+  appears under (Stripe's removed `request` is one entry covering 200 paths).
+- 2026-11-14 (implementation): a name a module merely imports is public only in a
+  package `__init__` or when listed in `__all__`. Without this rule most of what
+  openai "removed" was helper names that modules had imported.
+- 2026-11-14 (implementation): what the diff can confirm. Removals, renames and
+  signature changes only. A `deprecated`, `behavior-changed` or
+  `response-shape-changed` record is never confirmed by the diff and stays `medium`.
+- 2026-11-14 (implementation): a record whose replacement does not exist in the new
+  version is never fixable, whatever the model said.
+- 2026-11-14 (implementation): `param-required` covers both a new required parameter
+  and one that changed from optional to required. A parameter that disappeared is not
+  reported when the new signature still takes untyped `**kwargs`.
+- 2026-11-14 (implementation): a removed field of a response model is counted as
+  ignored (`attribute-removed`), because a static scan cannot find the code that reads
+  it. On openai 3.0.0 → 3.49.0 that is 2 fields.
+- 2026-11-14 (implementation): `guardian poll` now applies the API-diff half of the
+  gate and labels it `api-diff-only`. **Open:** a gate that fails (for example PyPI is
+  down) is reported but not retried; the note stays stored. Fix when spec 02 adds a
+  per-document assessment state.
+- **Still to measure:** the noise filter on consecutive single releases (it was
+  checked on two multi-release ranges), and whether diff-only records help or hurt in
+  the scanner eval.
 - Do `source: diff` records add useful findings or mostly noise? Measure in the
   scanner eval; if noise, restrict F3.9 to removals only. The spike supports keeping
   them: `openai` 2.x removed ten public fields in minor releases with no breaking label.

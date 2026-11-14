@@ -97,14 +97,20 @@ def poll(
     ctx: AppContext,
     *,
     assessor: Assessor | None = None,
+    gate_label: str = GATE_APPLIED,
     sources: Iterable[SdkSource] = SDK_SOURCES,
 ) -> PollResult:
-    """Check every change source, apply the release gate, fan out runs (spec 01)."""
+    """Check every change source, apply the release gate, fan out runs (spec 01).
+
+    `gate_label` is what the result reports when the assessor ran, so a partial gate
+    (for example the API diff alone) is never mistaken for the full one.
+    """
     with run_context():
         log.info("poll started")
         polls = poll_sources(ctx, sources)
         result = PollResult(outcome=POLL_OK, sources_checked=len(polls))
         assessed = False
+        gate_errors: list[str] = []
         for source_poll in polls:
             if source_poll.error is not None:
                 result.errors.append(f"{source_poll.source.id}: {source_poll.error}")
@@ -118,14 +124,23 @@ def poll(
                 if assessor is None:
                     continue
                 assessed = True
-                verdict = assessor(document)
+                try:
+                    verdict = assessor(document)
+                except Exception as exc:  # a gate failure must not stop the poll
+                    label = f"{document.package} {document.version}"
+                    log.error("gate failed", extra={"fields": {"note": label, "error": str(exc)}})
+                    gate_errors.append(f"gate for {label}: {exc}")
+                    continue
                 if verdict.breaking and (not document.is_edit or verdict.records_changed):
                     result.runs_enqueued += fan_out(ctx, document)
 
         if result.errors:
             result.outcome = POLL_FAILED if len(result.errors) == len(polls) else POLL_PARTIAL
+        if gate_errors:
+            result.errors += gate_errors
+            result.outcome = POLL_PARTIAL
         if assessed:
-            result.gate = GATE_APPLIED
+            result.gate = gate_label
         elif result.new_documents or result.edited_documents:
             result.gate = GATE_UNAVAILABLE
         else:

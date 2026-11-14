@@ -14,6 +14,7 @@ POLL_FAILED = "failed"  # every source failed
 
 # How the release gate was applied to this poll's documents.
 GATE_APPLIED = "applied"
+GATE_API_DIFF_ONLY = "api-diff-only"  # the diff ran; extraction (spec 02) is not built yet
 GATE_NOT_NEEDED = "not-needed"  # nothing new to assess
 GATE_UNAVAILABLE = "unavailable"  # extraction and the API diff are not built yet
 

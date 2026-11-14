@@ -22,6 +22,11 @@ class SdkSource:
     repo: str  # GitHub "owner/name"
     tag_prefix: str = "v"
     changelog_path: str = "CHANGELOG.md"
+    import_name: str | None = None  # top-level module, when it differs from `package`
+
+    @property
+    def module(self) -> str:
+        return self.import_name or self.package
 
     def version_of(self, tag: str) -> Version | None:
         """Map a release tag to a version (`v1.45.0` → `1.45.0`), or None if it is not one."""

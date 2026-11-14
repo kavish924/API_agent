@@ -39,7 +39,7 @@ spec drafted → reviewed → implemented → verified against acceptance criter
 |---|---|---|---|---|
 | [`00-foundation.md`](./00-foundation.md) | Project scaffold, config, DB schema, interfaces, CLI, CI | §8 | 0 | Verified |
 | [`01-change-discovery.md`](./01-change-discovery.md) | Change watching, release gate, fan-out, version range | FR1, FR2 | 1 | In progress |
-| [`03-api-surface-diffing.md`](./03-api-surface-diffing.md) | API diff; confidence and symbol checks; API lookup | FR2 | 1 | Draft |
+| [`03-api-surface-diffing.md`](./03-api-surface-diffing.md) | API diff; confidence and symbol checks; API lookup | FR2 | 1 | Implemented |
 | [`02-extraction.md`](./02-extraction.md) | Structured extraction (LLM) | FR2 | 1 | Draft |
 | [`04-repo-scanning.md`](./04-repo-scanning.md) | Repository scanning (libcst) | FR4 | 2 | Draft |
 | [`05-fix-generation.md`](./05-fix-generation.md) | Bump editor, codemods, single-shot fixer, AST guard | FR5 | 3 | Draft |
