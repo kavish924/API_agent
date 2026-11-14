@@ -67,17 +67,17 @@ If time is short, protect those two.
 ## Phase 1 — Know the changes (week 1)
 
 ### Change watching (spec 01)
-- [ ] SDK sources configured: `openai`, `stripe` [F1.1]
-- [ ] `poll` with ETags; per-source state stored; idempotent [F1.2, F1.3]
-- [ ] New release bodies stored byte-for-byte; edits become revisions [F1.4, F1.5]
-- [ ] Release gate: no breaking or deprecating record → no runs [F1.7]
-- [ ] Fan-out: one run job per active repo [F1.8]
-- [ ] Parsers for `requirements*.txt`, `pyproject.toml`, `poetry.lock`, `uv.lock` [F1.10]
-- [ ] Old = pinned version (lock wins); new = latest release [F1.11]
-- [ ] Silent end reasons: `package-not-used`, `version-not-pinned`, `up-to-date` [F1.12]
-- [ ] Notes for (old, new] fetched on demand and cached [F1.13]
-- [ ] `CHANGELOG.md` fallback when a release body is empty or only a link; regression on Stripe 16.0.0 [F1.14]
-- [ ] Gaps recorded when neither source has the version [F1.17]
+- [x] SDK sources configured: `openai`, `stripe` [F1.1]
+- [x] `poll` with ETags; per-source state stored; idempotent [F1.2, F1.3]
+- [x] New release bodies stored byte-for-byte; edits become revisions [F1.4, F1.5]
+- [ ] Release gate: no breaking or deprecating record → no runs [F1.7] — the gate hook and fan-out are built; the verdict itself needs specs 02 and 03
+- [x] Fan-out: one run job per active repo [F1.8]
+- [x] Parsers for `requirements*.txt`, `pyproject.toml`, `poetry.lock`, `uv.lock` [F1.10]
+- [x] Old = pinned version (lock wins); new = latest release [F1.11]
+- [x] Silent end reasons: `package-not-used`, `version-not-pinned`, `up-to-date` [F1.12]
+- [x] Notes for (old, new] fetched on demand and cached [F1.13]
+- [x] `CHANGELOG.md` fallback when a release body is empty or only a link; regression on Stripe 16.0.0 [F1.14]
+- [x] Gaps recorded when neither source has the version [F1.17]
 
 ### API diff and reconciliation (spec 03)
 - [ ] Fetch wheels from PyPI and load them statically; nothing is executed [F3.1]

@@ -6,6 +6,7 @@ same suite against Postgres (CI does this), which is how spec 00 F0.4 is checked
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -17,6 +18,22 @@ from guardian.common import db
 from guardian.common.config import Settings
 from guardian.common.context import AppContext, build_context
 from guardian.common.llm import StubProvider
+from tests.fakes import FakeGitHub
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging() -> Iterator[None]:
+    """Undo `configure_logging` after each test.
+
+    The CLI installs a handler on whatever stdout is at the time. Under the CLI test
+    runner that is a temporary stream, and leaving the handler in place would make
+    later tests log to a closed file.
+    """
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
 
 
 @pytest.fixture
@@ -54,13 +71,31 @@ def stub() -> StubProvider:
 
 
 @pytest.fixture
-def ctx(migrated_url: str, tmp_path: Path, stub: StubProvider) -> Iterator[AppContext]:
+def github() -> FakeGitHub:
+    """A fake GitHub API. Nothing in the test suite reaches the network."""
+    return FakeGitHub()
+
+
+@pytest.fixture
+def slept() -> list[float]:
+    """Backoff delays the code asked for. Tests never really wait."""
+    return []
+
+
+@pytest.fixture
+def ctx(
+    migrated_url: str,
+    tmp_path: Path,
+    stub: StubProvider,
+    github: FakeGitHub,
+    slept: list[float],
+) -> Iterator[AppContext]:
     settings = Settings(
         database_url=migrated_url,
         blob_dir=tmp_path / "blobs",
         llm_model="stub-model",
         _env_file=None,
     )
-    context = build_context(settings, provider=stub)
+    context = build_context(settings, provider=stub, http=github.client(), sleep=slept.append)
     yield context
     context.engine.dispose()

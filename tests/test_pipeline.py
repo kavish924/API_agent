@@ -17,7 +17,9 @@ from guardian.common.config import Settings
 from guardian.common.context import AppContext, build_context
 from guardian.common.jobs import InProcessQueue, Job, JobType
 from guardian.github_app.delivery import Delivery, deliver
-from guardian.pipeline.types import NOT_IMPLEMENTED, RunRequest
+from guardian.pipeline.types import NOT_IMPLEMENTED, POLL_OK, RunRequest
+from guardian.watch.depfiles import NOT_USED
+from tests.fakes import OPENAI, FakeGitHub
 
 runner = CliRunner()
 
@@ -26,7 +28,8 @@ runner = CliRunner()
 
 
 def test_entry_points_are_plain_functions(ctx: AppContext) -> None:
-    assert pipeline.poll(ctx).outcome == NOT_IMPLEMENTED
+    assert pipeline.poll(ctx).outcome == POLL_OK
+    # An installed repository (not a local path) needs the GitHub App, which is spec 07.
     request = RunRequest(repo="octo/app", target="openai@1.45.0", package="openai")
     assert pipeline.run(request, ctx).outcome == NOT_IMPLEMENTED
     assert pipeline.handle_event({"action": "created"}, ctx).outcome == NOT_IMPLEMENTED
@@ -98,11 +101,18 @@ def test_pause_flag_comes_from_settings(migrated_url: str, tmp_path: Path) -> No
 
 
 @pytest.fixture
-def cli_env(database_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def cli_env(
+    database_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, github: FakeGitHub
+) -> str:
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("GUARDIAN_BLOB_DIR", str(tmp_path / "blobs"))
     monkeypatch.setenv("GUARDIAN_LLM_PROVIDER", "none")
     monkeypatch.chdir(tmp_path)  # no stray .env is picked up
+    # The CLI builds its own context; give it the fake GitHub so no test hits the network.
+    monkeypatch.setattr(
+        "guardian.cli.build_context",
+        lambda settings: build_context(settings, http=github.client(), sleep=lambda _: None),
+    )
     return database_url
 
 
@@ -154,13 +164,46 @@ def test_migrate_then_poll_and_run(cli_env: str, tmp_path: Path) -> None:
 
     polled = runner.invoke(app, ["poll"])
     assert polled.exit_code == 0, polled.output
-    assert _last_json(polled.output)["outcome"] == NOT_IMPLEMENTED
+    assert _last_json(polled.output)["outcome"] == POLL_OK
 
-    ran = runner.invoke(
-        app, ["run", "--repo", str(tmp_path), "--package", "openai", "--to", "1.45.0"]
-    )
+    # A directory with no dependency files does not use the package.
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    ran = runner.invoke(app, ["run", "--repo", str(empty), "--package", "openai"])
     assert ran.exit_code == 0, ran.output
-    assert _last_json(ran.output)["outcome"] == NOT_IMPLEMENTED
+    assert _last_json(ran.output)["outcome"] == NOT_USED
+
+
+def test_cli_run_resolves_the_range_of_a_local_repo(
+    cli_env: str, tmp_path: Path, github: FakeGitHub
+) -> None:
+    for version in ("1.30.0", "1.31.0", "1.32.0"):
+        github.add_release(OPENAI, f"v{version}", f"## {version}\n\n* change in {version}\n")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "requirements.txt").write_text("openai==1.30.0\n", encoding="utf-8")
+    assert runner.invoke(app, ["migrate"]).exit_code == 0
+
+    ran = runner.invoke(app, ["run", "--repo", str(repo), "--package", "openai"])
+    assert ran.exit_code == 0, ran.output
+    result = _last_json(ran.output)
+    assert (result["from_version"], result["to_version"], result["notes"]) == (
+        "1.30.0",
+        "1.32.0",
+        2,
+    )
+
+    # --from and --to override the pinned version and the latest release.
+    ranged = runner.invoke(
+        app,
+        ["run", "--repo", str(repo), "--package", "openai", "--from", "1.31.0", "--to", "1.32.0"],
+    )
+    result = _last_json(ranged.output)
+    assert (result["from_version"], result["to_version"], result["notes"]) == (
+        "1.31.0",
+        "1.32.0",
+        1,
+    )
 
 
 def test_ingest_requires_an_existing_file(cli_env: str, tmp_path: Path) -> None:

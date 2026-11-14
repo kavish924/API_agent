@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     llm_provider: str = "none"
     llm_model: str = ""
 
+    # Optional token for reading public release data. Without it GitHub allows 60
+    # requests an hour, which is enough for local use.
+    github_token: SecretStr | None = None
+
     github_app_id: str | None = None
     github_private_key: SecretStr | None = None
     github_webhook_secret: SecretStr | None = None
