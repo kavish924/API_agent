@@ -29,6 +29,9 @@ class IndexEntry:
     published_at: str | None
     sha256: str
     handled: bool
+    # False while a note announced by a poll waits for the release gate. A failed
+    # assessment leaves it False, so the next poll tries again.
+    assessed: bool = True
 
 
 @dataclass(frozen=True)
@@ -162,6 +165,12 @@ class ReleaseIndex:
 
     def mark_handled(self, version: Version) -> None:
         self.entries[str(version)].handled = True
+
+    def awaiting_gate(self) -> list[Version]:
+        return sorted(Version(key) for key, entry in self.entries.items() if not entry.assessed)
+
+    def set_assessed(self, version: Version, assessed: bool) -> None:
+        self.entries[str(version)].assessed = assessed
 
     def entry(self, version: Version) -> IndexEntry:
         return self.entries[str(version)]

@@ -4,7 +4,7 @@
 
 VENV_PY := $(if $(wildcard .venv/Scripts/python.exe),.venv/Scripts/python.exe,.venv/bin/python)
 
-.PHONY: dev test lint types check migrate
+.PHONY: dev test lint types check migrate eval-extraction
 
 dev:
 	python scripts/dev.py
@@ -23,3 +23,7 @@ check: lint types test
 
 migrate:
 	$(VENV_PY) -m guardian.cli migrate
+
+# Needs a configured LLM provider; writes evals/results/extraction-<time>.json
+eval-extraction:
+	$(VENV_PY) -m guardian.extract.evaluation

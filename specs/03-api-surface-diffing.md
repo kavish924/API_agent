@@ -115,9 +115,9 @@ records about symbols that never existed are dropped.
   ignored (`attribute-removed`), because a static scan cannot find the code that reads
   it. On openai 3.0.0 → 3.49.0 that is 2 fields.
 - 2026-11-14 (implementation): `guardian poll` now applies the API-diff half of the
-  gate and labels it `api-diff-only`. **Open:** a gate that fails (for example PyPI is
-  down) is reported but not retried; the note stays stored. Fix when spec 02 adds a
-  per-document assessment state.
+  gate and labels it `api-diff-only`. A gate that fails (for example PyPI is down)
+  leaves the release pending, and the next poll retries it (closed 2026-11-18 with
+  spec 02).
 - **Still to measure:** the noise filter on consecutive single releases (it was
   checked on two multi-release ranges), and whether diff-only records help or hurt in
   the scanner eval.

@@ -16,7 +16,9 @@ from guardian.common import db
 from guardian.common.config import get_settings
 from guardian.common.context import AppContext, build_context
 from guardian.common.log import configure_logging
-from guardian.pipeline.types import GATE_API_DIFF_ONLY, NOT_IMPLEMENTED, RunRequest
+from guardian.extract.extractor import llm_available
+from guardian.extract.gate import make_release_assessor
+from guardian.pipeline.types import GATE_API_DIFF_ONLY, GATE_APPLIED, NOT_IMPLEMENTED, RunRequest
 
 app = typer.Typer(
     help="API Change Guardian: applies provider changes to the code that depends on them.",
@@ -35,8 +37,12 @@ def _context() -> AppContext:
 def poll() -> None:
     """Check every change source and start runs for changes that pass the release gate."""
     ctx = _context()
-    # The release gate so far is the API diff alone; extraction joins it in spec 02.
-    result = pipeline.poll(ctx, assessor=make_diff_assessor(ctx), gate_label=GATE_API_DIFF_ONLY)
+    if llm_available(ctx.llm):
+        # The full gate: release notes (extraction) and the API diff together.
+        result = pipeline.poll(ctx, assessor=make_release_assessor(ctx), gate_label=GATE_APPLIED)
+    else:
+        # No model configured: the gate can only look at the code.
+        result = pipeline.poll(ctx, assessor=make_diff_assessor(ctx), gate_label=GATE_API_DIFF_ONLY)
     typer.echo(result.model_dump_json())
 
 

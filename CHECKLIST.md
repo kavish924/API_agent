@@ -70,7 +70,7 @@ If time is short, protect those two.
 - [x] SDK sources configured: `openai`, `stripe` [F1.1]
 - [x] `poll` with ETags; per-source state stored; idempotent [F1.2, F1.3]
 - [x] New release bodies stored byte-for-byte; edits become revisions [F1.4, F1.5]
-- [ ] Release gate: no breaking or deprecating record → no runs [F1.7] — the API-diff half is live (`gate: api-diff-only`); the release-note half needs spec 02
+- [x] Release gate: no breaking or deprecating record → no runs [F1.7] — full gate when a model is configured, `api-diff-only` otherwise; failed assessments are retried
 - [x] Fan-out: one run job per active repo [F1.8]
 - [x] Parsers for `requirements*.txt`, `pyproject.toml`, `poetry.lock`, `uv.lock` [F1.10]
 - [x] Old = pinned version (lock wins); new = latest release [F1.11]
@@ -96,21 +96,21 @@ If time is short, protect those two.
 - [ ] Measure the noise filter on consecutive single `openai` releases before trusting the gate
 
 ### Extraction (spec 02)
-- [ ] Change-record schema and `change_type` enum [F2.1, F2.2]
-- [ ] `fixable` forced false for behaviour and response-shape changes [F2.3]
-- [ ] One retry on schema failure, then `extraction-failed` [F2.4]
-- [ ] Evidence check with the documented normalisation [F2.5]
-- [ ] No tools; note passed as delimited data [F2.6]
-- [ ] Cached per (package, version, revision) [F2.7]
-- [ ] All three note formats: headings, inline ⚠️, `CHANGELOG.md` sections [F2.11]
-- [ ] ⚠️ on an addition yields no record; unmarked "Remove support for" does [F2.12]
-- [ ] Dependency changes kept as `behavior-changed` (e.g. `openai` 3.0.0 `http_client`) [F2.13]
-- [ ] Real-format fixtures stored: `openai` 2.0.0 and 3.0.0, `stripe` 9.0.0, 13.0.0, 16.0.0
+- [x] Change-record schema and `change_type` enum [F2.1, F2.2]
+- [x] `fixable` forced false for behaviour and response-shape changes [F2.3]
+- [x] One retry on schema failure, then `extraction-failed` [F2.4]
+- [x] Evidence check with the documented normalisation [F2.5]
+- [x] No tools; note passed as delimited data [F2.6]
+- [x] Cached per (package, version, revision) [F2.7]
+- [ ] All three note formats: headings, inline ⚠️, `CHANGELOG.md` sections [F2.11] — prompt and labelled fixture done; needs a real model to verify
+- [ ] ⚠️ on an addition yields no record; unmarked "Remove support for" does [F2.12] — prompt and labelled fixture done; needs a real model to verify
+- [ ] Dependency changes kept as `behavior-changed` (e.g. `openai` 3.0.0 `http_client`) [F2.13] — prompt and labelled fixture done; needs a real model to verify
+- [x] Real-format fixtures stored: `openai` 2.0.0 and 3.0.0, `stripe` 9.0.0, 13.0.0, 16.0.0 — labelled by Claude, needs human review
 
 ### Evaluation started (spec 08)
 - [ ] 30 release notes hand-labeled **before** running the model on them [F8.1]
 - [ ] Injection-payload cases added
-- [ ] `make eval-extraction` runs and writes a results file [F8.11]
+- [ ] `make eval-extraction` runs and writes a results file [F8.11] — harness built and tested with a scripted model; needs a real model
 - [ ] 6–8 real repos for the scanner eval chosen and recorded
 
 **Exit**

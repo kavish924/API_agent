@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import httpx
+from packaging.version import Version
 
 from guardian.common.context import AppContext
 from guardian.common.db import session_scope
@@ -32,6 +33,9 @@ class SourcePoll:
     new: list[StoredDocument] = field(default_factory=list)
     edited: list[StoredDocument] = field(default_factory=list)
     gaps: list[Gap] = field(default_factory=list)
+    # Notes waiting for the release gate: this poll's new and edited ones, and any an
+    # earlier poll could not assess. Each is the latest revision of its version.
+    pending: list[StoredDocument] = field(default_factory=list)
     error: str | None = None
 
 
@@ -58,6 +62,7 @@ def poll_source(ctx: AppContext, source: SdkSource) -> SourcePoll:
                 result.gaps.append(outcome)
             elif outcome.created:
                 result.new.append(outcome)
+                index.set_assessed(version, False)
         index.mark_handled(version)
 
     # An edited body becomes a new revision, but only for notes already in use.
@@ -66,9 +71,15 @@ def poll_source(ctx: AppContext, source: SdkSource) -> SourcePoll:
             outcome = notes.materialize(version)
             if not isinstance(outcome, Gap) and outcome.created:
                 result.edited.append(outcome)
+                index.set_assessed(version, False)
 
-    if pending:
-        index.save()  # persist the handled flags
+    if pending or result.edited:
+        index.save()  # persist the handled and assessed flags
+
+    for version in index.awaiting_gate():
+        document = store.revision(source, str(version))
+        if document is not None:
+            result.pending.append(document)
     latest = index.latest_stable()
     with session_scope(ctx.sessions) as session:
         row = session.get(Source, source.id)
@@ -76,6 +87,17 @@ def poll_source(ctx: AppContext, source: SdkSource) -> SourcePoll:
             row.etag = index.etag
             row.last_seen = str(latest) if latest is not None else None
     return result
+
+
+def mark_assessed(ctx: AppContext, source: SdkSource, versions: Iterable[str]) -> None:
+    """Record that the release gate has decided these notes."""
+    versions = list(versions)
+    if not versions:
+        return
+    index = ReleaseIndex(source, github_client(ctx), ctx.blobs)
+    for version in versions:
+        index.set_assessed(Version(version), True)
+    index.save()
 
 
 def poll_sources(ctx: AppContext, sources: Iterable[SdkSource] = SDK_SOURCES) -> list[SourcePoll]:

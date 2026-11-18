@@ -85,6 +85,21 @@ class DocumentStore:
             session.flush()
             return self._view(source, row, created=True, is_edit=latest is not None)
 
+    def revision(
+        self, source: SdkSource, version: str, revision: int | None = None
+    ) -> StoredDocument | None:
+        """A stored revision of a note; the latest when `revision` is None."""
+        with session_scope(self._sessions) as session:
+            query = select(SourceDocument).where(
+                SourceDocument.source_id == source.id, SourceDocument.version == version
+            )
+            if revision is not None:
+                query = query.where(SourceDocument.revision == revision)
+            row = session.scalars(query.order_by(SourceDocument.revision.desc()).limit(1)).first()
+            if row is None:
+                return None
+            return self._view(source, row, created=False, is_edit=row.revision > 1)
+
     def text(self, document: StoredDocument) -> str:
         return self._blobs.get(document.blob_ref).decode()
 

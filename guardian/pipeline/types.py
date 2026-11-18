@@ -41,6 +41,17 @@ class RunResult(BaseModel):
     notes: int = 0  # release notes in the range
     notes_stored: int = 0  # of those, how many this run had to store
     gaps: int = 0  # versions with no usable note
+    # Grading (specs 02 and 03).
+    extraction: str | None = None  # done | partial | unavailable
+    notes_failed: int = 0
+    records: int = 0  # changes extracted from the notes
+    records_dropped: int = 0  # about symbols that never existed in the old version
+    api_diff: str | None = None  # done | failed
+    changes: int = 0  # graded changes, from the notes and the diff together
+    changes_high: int = 0
+    changes_fixable: int = 0
+    changes_from_diff: int = 0  # breaks no release note mentions
+    change_types: dict[str, int] = {}
     verification_level: str | None = None
     findings: int = 0
 
@@ -54,6 +65,8 @@ class PollResult(BaseModel):
     edited_documents: int = 0
     gaps: int = 0
     gate: str = GATE_NOT_NEEDED
+    assessed: int = 0  # notes the gate decided in this poll
+    awaiting_gate: int = 0  # notes still waiting (no gate yet, or it failed)
     runs_enqueued: int = 0
     errors: list[str] = []
 

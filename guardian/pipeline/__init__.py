@@ -22,6 +22,7 @@ from guardian.common.db import session_scope
 from guardian.common.jobs import InProcessQueue, Job, JobType
 from guardian.common.log import get_logger, run_context
 from guardian.common.models import Repo
+from guardian.pipeline.grade import grade_range
 from guardian.pipeline.types import (
     GATE_APPLIED,
     GATE_NOT_NEEDED,
@@ -38,7 +39,7 @@ from guardian.pipeline.types import (
 from guardian.watch.depfiles import LocalRepoFiles
 from guardian.watch.documents import StoredDocument
 from guardian.watch.github import SourceError
-from guardian.watch.poller import poll_sources
+from guardian.watch.poller import mark_assessed, poll_sources
 from guardian.watch.range import OK, resolve_range
 from guardian.watch.sources import SDK_SOURCES, SdkSource, source_for_package
 
@@ -120,9 +121,10 @@ def poll(
             result.new_documents += len(source_poll.new)
             result.edited_documents += len(source_poll.edited)
             result.gaps += len(source_poll.gaps)
-            for document in [*source_poll.new, *source_poll.edited]:
+            decided: list[str] = []
+            for document in source_poll.pending:
                 if assessor is None:
-                    continue
+                    continue  # stays pending until a poll has a gate
                 assessed = True
                 try:
                     verdict = assessor(document)
@@ -130,9 +132,13 @@ def poll(
                     label = f"{document.package} {document.version}"
                     log.error("gate failed", extra={"fields": {"note": label, "error": str(exc)}})
                     gate_errors.append(f"gate for {label}: {exc}")
-                    continue
-                if verdict.breaking and (not document.is_edit or verdict.records_changed):
+                    continue  # stays pending: the next poll tries again
+                decided.append(document.version)
+                if verdict.breaking and (document.revision == 1 or verdict.records_changed):
                     result.runs_enqueued += fan_out(ctx, document)
+            mark_assessed(ctx, source_poll.source, decided)
+            result.assessed += len(decided)
+            result.awaiting_gate += len(source_poll.pending) - len(decided)
 
         if result.errors:
             result.outcome = POLL_FAILED if len(result.errors) == len(polls) else POLL_PARTIAL
@@ -141,7 +147,7 @@ def poll(
             result.outcome = POLL_PARTIAL
         if assessed:
             result.gate = gate_label
-        elif result.new_documents or result.edited_documents:
+        elif result.awaiting_gate:
             result.gate = GATE_UNAVAILABLE
         else:
             result.gate = GATE_NOT_NEEDED
@@ -197,8 +203,19 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
     if version_range.outcome != OK:
         return result  # the run ends here, silently, with the reason recorded
 
+    grading = grade_range(ctx, source, version_range)
+    result.extraction = grading.extraction
+    result.notes_failed = grading.notes_failed
+    result.api_diff = grading.api_diff
+    result.change_types = grading.by_type()
+    for name, value in grading.summary().items():
+        setattr(result, name, value)
+
     result.outcome = NOT_IMPLEMENTED
-    result.reason = "range resolved; extraction, scanning and fixing are not built yet"
+    if grading.api_diff_error is not None:
+        result.reason = f"api diff failed: {grading.api_diff_error}"
+    else:
+        result.reason = "changes graded; scanning and fixing are not built yet"
     return result
 
 
