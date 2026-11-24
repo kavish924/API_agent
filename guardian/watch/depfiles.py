@@ -53,7 +53,8 @@ class LocalRepoFiles:
         target = (self.root / path).resolve()
         if not target.is_relative_to(self.root) or not target.is_file():
             return None
-        return target.read_text(encoding="utf-8", errors="replace")
+        # Bytes, not text mode: line endings are kept, so a patch never rewrites them.
+        return target.read_bytes().decode("utf-8", errors="replace")
 
 
 @dataclass(frozen=True)

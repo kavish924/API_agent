@@ -144,7 +144,7 @@ def test_help_lists_the_commands() -> None:
 def test_run_help_lists_its_options() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    for option in ("--repo", "--package", "--from", "--to"):
+    for option in ("--repo", "--package", "--from", "--to", "--fix-mode", "--write-patch"):
         assert option in _plain(result.output)
 
 

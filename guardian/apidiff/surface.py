@@ -23,7 +23,7 @@ from typing import Any
 
 import griffe
 
-FORMAT = 1  # bump when the model changes, so cached surfaces are rebuilt
+FORMAT = 2  # bump when the model changes, so cached surfaces are rebuilt
 
 POSITIONAL_ONLY = "positional-only"
 POSITIONAL_OR_KEYWORD = "positional or keyword"
@@ -236,6 +236,15 @@ class Surface:
             return resolved.type
         return None
 
+    def member(self, class_path: str, name: str) -> Resolved | None:
+        """`name` looked up on a class and its bases: a method, nested class, key or field."""
+        return self._member(class_path, name)
+
+    def init_path(self, class_path: str) -> str | None:
+        """Canonical path of the `__init__` a call to this class runs, if it is in the package."""
+        init = self.all_methods(class_path).get("__init__")
+        return init.path if init is not None else None
+
     def _member(self, class_path: str, name: str) -> Resolved | None:
         for cls in self.mro(class_path):
             if name in cls.methods:
@@ -370,6 +379,14 @@ def _canonical(expr: Any) -> str | None:
         return None
 
 
+def _constructed(attribute: Any) -> str | None:
+    """The class an unannotated attribute is built from: `self.v1 = V1Services(...)`."""
+    value = getattr(attribute, "value", None)
+    if isinstance(value, griffe.ExprCall):
+        return _canonical(value.function)
+    return None
+
+
 class _Builder:
     def __init__(self, package: str) -> None:
         self.package = package
@@ -490,7 +507,7 @@ class _Builder:
                 classes[name] = self._class(target)
             elif target.is_attribute:
                 annotation = getattr(target, "annotation", None)
-                attributes[name] = _canonical(annotation)
+                attributes[name] = _canonical(annotation) or _constructed(target)
                 if typed_dict and annotation is not None:
                     text = str(annotation)
                     if text.startswith("Required["):

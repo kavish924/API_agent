@@ -75,6 +75,9 @@ never becomes a PR.
   do when detection fails. Proposed: outcome `could-not-install`, which is treated as
   no level reached beyond a compile check on the host image.
 - Pyright for all repos, or mypy when the repo is configured for it? Decide in Phase 3.
+- 2026-11-24: the Docker sandbox will run on GCP (the worker VM, spec 09), not on the
+  development machine, which has no Docker. The spec stays `Draft` until that is set
+  up; spec 05 is built first and needs no Docker.
 - 2026-11-13 (v3): `base` is now the default branch with its pinned version; the
   type-check service for the agent, lock regeneration, and the partial-patch rule are
   added.

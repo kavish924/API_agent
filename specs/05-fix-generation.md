@@ -1,5 +1,5 @@
 # Spec 05 — Fix generation
-Status: Draft · Phase: 3 · PRD v3 ref: FR5 · Depends on: 04-repo-scanning
+Status: Implemented · Phase: 3 · PRD v3 ref: FR5 · Depends on: 04-repo-scanning
 
 ## Goal
 Turn a run's findings into one **minimal** patch that holds the version bump and the
@@ -36,17 +36,17 @@ and patch assembly. The agent fixer is spec 11 and plugs in as Tier 2.
 | F5.14 | Each attempt records its tier, the diff, the guard result and the LLM cost |
 
 ## Acceptance criteria
-- [ ] GIVEN `openai==1.30.0` in `requirements.txt` with a trailing comment, WHEN the bump editor runs, THEN only the version changes and the comment is intact.
-- [ ] GIVEN a keyword rename and a call using the old keyword, WHEN the codemod runs, THEN only that argument name changes and the rest of the file is byte-identical.
-- [ ] GIVEN an import path change, THEN only the import statement changes.
-- [ ] GIVEN a model diff that edits the matched call and also adds `import subprocess`, THEN the guard rejects it.
-- [ ] GIVEN a model diff that changes a statement with no finding, THEN the guard rejects it.
-- [ ] GIVEN a model diff that edits `.github/workflows/ci.yml` or `pyproject.toml`, THEN the guard rejects it.
-- [ ] GIVEN a model diff over the line cap, THEN it is rejected.
-- [ ] GIVEN a `response-shape-changed` finding, THEN no diff is produced and the finding is report-only.
-- [ ] GIVEN two fixable findings in one file and a bump, THEN one combined patch applies cleanly.
-- [ ] GIVEN one fixed and one report-only finding, THEN the patch is marked `partial`.
-- [ ] GIVEN the same findings run in `agent` and `single-shot` mode, THEN both produce results in the same shape.
+- [x] GIVEN `openai==1.30.0` in `requirements.txt` with a trailing comment, WHEN the bump editor runs, THEN only the version changes and the comment is intact.
+- [x] GIVEN a keyword rename and a call using the old keyword, WHEN the codemod runs, THEN only that argument name changes and the rest of the file is byte-identical.
+- [x] GIVEN an import path change, THEN only the import statement changes.
+- [x] GIVEN a model diff that edits the matched call and also adds `import subprocess`, THEN the guard rejects it.
+- [x] GIVEN a model diff that changes a statement with no finding, THEN the guard rejects it.
+- [x] GIVEN a model diff that edits `.github/workflows/ci.yml` or `pyproject.toml`, THEN the guard rejects it.
+- [x] GIVEN a model diff over the line cap, THEN it is rejected.
+- [x] GIVEN a `response-shape-changed` finding, THEN no diff is produced and the finding is report-only.
+- [x] GIVEN two fixable findings in one file and a bump, THEN one combined patch applies cleanly.
+- [x] GIVEN one fixed and one report-only finding, THEN the patch is marked `partial`.
+- [x] GIVEN the same findings run in `agent` and `single-shot` mode, THEN both produce results in the same shape.
 
 ## Technical notes
 - The guard works on parsed trees, not on diff text: parse both versions, map changed
@@ -59,6 +59,35 @@ and patch assembly. The agent fixer is spec 11 and plugs in as Tier 2.
 - The guard narrows what a diff can do. It does not prove a diff harmless: a change
   inside the matched statement could still be wrong. That residual risk is why PRs are
   drafts and why issue-only mode exists (spec 07).
+
+### As built (2026-11-24)
+- Code: `guardian/fix/` — `bump.py` (F5.1), `codemods.py` (F5.3), `guard.py`
+  (F5.7–F5.10), `single_shot.py` (F5.4), `patch.py` (F5.11–F5.14), `types.py` (the
+  `Tier2Fixer` interface spec 11 implements). `pipeline.run` builds the patch after the
+  scan, stores each finding's `fix_status`/`fix_tier`, and puts the diff in the blob
+  store; `guardian run --fix-mode ... --write-patch FILE` writes it out.
+- F5.2: the bump editor lists lock files that pin the package (`uv.lock`,
+  `poetry.lock`); regenerating them is spec 06 F6.14. A range the repo chose that
+  already allows the new version needs no manifest edit; one that excludes it, a
+  hash-pinned requirement or a URL pin ends the run with `could-not-bump`. Poetry's
+  `^` and `~` constraints are translated to PEP 440 for that check.
+- Every bump edit is checked by parsing the file again with the spec 01 readers.
+  `LocalRepoFiles` now reads bytes, so CRLF line endings survive a patch.
+- Codemods: keyword and `TypedDict` key renames, symbol renames (an unaliased
+  `from pkg import Old` renames every use of `Old` through scope analysis; an aliased
+  one keeps the alias), import path changes when the import names one symbol, and
+  literal replacements, including through a module-level constant. A moved symbol
+  reached by attribute (`pkg.old_mod.X`) or a multi-name import goes to Tier 2.
+- Tier 2 works one region at a time (the innermost function, or the top-level
+  statement), bottom-up, so earlier line numbers stay valid. In `agent` mode, until
+  spec 11 lands, Tier 2 findings are `fix-failed` with that reason.
+- Guard units are simple statement lines and compound headers (decorators included),
+  aligned by `(depth, code)`. Rejection reasons are capped at 10 per attempt so they
+  fit an agent's tool result.
+- Real run (2026-11-24): `stripe` 15.6.2 -> 16.0.0 on a sample repo. All 4 uses of
+  `stripe.Reversal` (import, annotation, attribute call, `isinstance`) were renamed to
+  `TransferReversal` by codemods and the pin was bumped with its comment kept;
+  `patch_status` `complete`.
 
 ## Test plan
 - Unit: bump editor per file format (F5.1); each codemod with formatting checks
@@ -73,10 +102,13 @@ and patch assembly. The agent fixer is spec 11 and plugs in as Tier 2.
 
 ## Open questions / decisions
 - Default for the diff size cap; revisit after the fix eval.
-- Should the guard also reject new call targets inside a matched statement (for
-  example wrapping the call in `eval`)? Likely yes; decide when writing the
-  adversarial test set.
-- Which lock tools are supported in v3: `uv` only, or `uv` and Poetry? Decide in
-  Phase 3 from the eval repos.
+- 2026-11-24: the guard also rejects **new names** in a changed statement. A free name
+  (not a keyword-argument name, attribute name or parameter) that appears in the new
+  statement must already appear in the statements it replaces, or be bound by an
+  import from the watched SDK. This rejects wrapping the call in `eval`, `exec`,
+  `getattr`, `__import__`, `open` and similar.
+- 2026-11-24: lock regeneration supports both `uv` and Poetry (`uv.lock`,
+  `poetry.lock`), matching the lock files spec 01 already reads.
+- 2026-11-24: spec approved.
 - 2026-11-13 (v3): bump editor and patch assembly added, because the app now does the
   upgrade itself; the single LLM call becomes the baseline next to the agent (spec 11).

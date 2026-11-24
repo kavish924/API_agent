@@ -3,13 +3,14 @@
 `poll`, `run` and `handle_event` are plain functions of a context and explicit inputs.
 The job queue is only a way of invoking them.
 
-Built so far: change watching and the version range (spec 01). Stages that are not
-built yet return the explicit outcome `not-implemented`.
+Built so far: change watching and the version range (spec 01), grading (specs 02 and
+03), scanning (spec 04) and fix generation (spec 05). Stages that are not built yet
+return the explicit outcome `not-implemented`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,11 +23,23 @@ from guardian.common.db import session_scope
 from guardian.common.jobs import InProcessQueue, Job, JobType
 from guardian.common.log import get_logger, run_context
 from guardian.common.models import Repo
+from guardian.fix import (
+    FIX_FAILED,
+    FIXED,
+    MODE_SINGLE_SHOT,
+    MODES,
+    REPORT_ONLY,
+    PatchSet,
+    SingleShotFixer,
+    Tier2Fixer,
+    build_patch,
+)
 from guardian.pipeline.grade import grade_range
 from guardian.pipeline.types import (
     GATE_APPLIED,
     GATE_NOT_NEEDED,
     GATE_UNAVAILABLE,
+    NO_FINDINGS,
     NOT_IMPLEMENTED,
     POLL_FAILED,
     POLL_OK,
@@ -36,6 +49,9 @@ from guardian.pipeline.types import (
     RunRequest,
     RunResult,
 )
+from guardian.scan.analyzer import Finding
+from guardian.scan.scanner import scan_repo
+from guardian.scan.store import LOCAL_INSTALLATION, local_identity, record_fixes, record_scan
 from guardian.watch.depfiles import LocalRepoFiles
 from guardian.watch.documents import StoredDocument
 from guardian.watch.github import SourceError
@@ -212,11 +228,92 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
         setattr(result, name, value)
 
     result.outcome = NOT_IMPLEMENTED
-    if grading.api_diff_error is not None:
+    if grading.api_diff_error is not None or grading.old_surface is None:
         result.reason = f"api diff failed: {grading.api_diff_error}"
-    else:
-        result.reason = "changes graded; scanning and fixing are not built yet"
+        return result
+    if files is None:
+        result.reason = "changes graded; scanning needs a local checkout or the GitHub App"
+        return result
+
+    scan = scan_repo(checkout, source.module, grading.old_surface, grading.changes)
+    result.findings = len(scan.findings)
+    result.finding_sites = scan.sites()
+    result.findings_by_tier = scan.by_tier()
+    result.files_scanned = scan.files_total
+    result.files_parsed = scan.files_parsed
+    result.files_skipped = len(scan.skipped)
+    result.scan_seconds = round(scan.seconds, 2)
+
+    outcome = NO_FINDINGS if not scan.findings else NOT_IMPLEMENTED
+    repo, head = local_identity(checkout)
+    assert version_range.old is not None and version_range.new is not None
+    result.run_id = record_scan(
+        ctx.sessions,
+        repo=repo,
+        installation_id=LOCAL_INSTALLATION,
+        target=f"{source.package}@{version_range.new}",
+        head=request.head_sha or head,
+        package=source.package,
+        from_version=version_range.old,
+        to_version=version_range.new,
+        changes=grading.changes,
+        result=scan,
+        outcome=outcome,
+    )
+    result.outcome = outcome
+    if outcome == NO_FINDINGS:
+        result.reason = "no code in this repository uses what changed"  # F4.8: the run ends here
+        return result
+
+    mode = request.fix_mode or ctx.settings.fix_mode
+    if mode not in MODES:
+        result.reason = f"unknown fix mode {mode!r}; expected one of {', '.join(MODES)}"
+        return result
+    fixer: Tier2Fixer | None = None
+    if mode == MODE_SINGLE_SHOT:
+        fixer = SingleShotFixer(ctx.llm, run_id=result.run_id)
+    patch = build_patch(
+        files,
+        scan.findings,
+        grading.changes,
+        package=source.package,
+        module=source.module,
+        old=version_range.old,
+        new=version_range.new,
+        mode=mode,
+        fixer=fixer,
+        line_cap=ctx.settings.fix_line_cap,
+    )
+    _record_patch(ctx, result, scan.findings, patch, mode)
+    result.reason = "patch built; verification is not built yet (spec 06)"
     return result
+
+
+def _record_patch(
+    ctx: AppContext,
+    result: RunResult,
+    findings: Sequence[Finding],
+    patch: PatchSet,
+    mode: str,
+) -> None:
+    assert result.run_id is not None
+    fixes = [(fix.index, fix.status, fix.tier) for fix in patch.fixes]
+    record_fixes(ctx.sessions, result.run_id, findings, fixes)
+    result.patch_status = patch.status
+    result.fix_mode = mode
+    result.fixed = patch.count(FIXED)
+    result.report_only = patch.count(REPORT_ONLY)
+    result.fix_failed = patch.count(FIX_FAILED)
+    result.patch_files = sorted(patch.files)
+    result.lock_files = patch.lock_files
+    result.bump_problems = [
+        f"{problem.file}: {problem.reason} {problem.detail}".strip()
+        for problem in patch.bump_problems
+    ]
+    result.fix_cost = round(patch.cost, 6)
+    if patch.files:
+        key = f"patches/run-{result.run_id}.diff"
+        result.patch_ref = ctx.blobs.put(key, patch.diff().encode("utf-8"))
 
 
 def handle_event(payload: dict[str, Any], ctx: AppContext) -> EventResult:

@@ -58,6 +58,14 @@ def run(
         str | None,
         typer.Option("--to", help="New version. Default: the latest release."),
     ] = None,
+    fix_mode: Annotated[
+        str | None,
+        typer.Option("--fix-mode", help="Tier 2 fixer: agent or single-shot. Default: setting."),
+    ] = None,
+    write_patch: Annotated[
+        Path | None,
+        typer.Option("--write-patch", help="Write the patch (a unified diff) to this file."),
+    ] = None,
 ) -> None:
     """Run the pipeline once for a local repository and one package."""
     request = RunRequest(
@@ -66,8 +74,12 @@ def run(
         package=package,
         from_version=from_version,
         to_version=to_version,
+        fix_mode=fix_mode,
     )
-    result = pipeline.run(request, _context())
+    ctx = _context()
+    result = pipeline.run(request, ctx)
+    if write_patch is not None and result.patch_ref is not None:
+        write_patch.write_bytes(ctx.blobs.get(result.patch_ref))
     typer.echo(result.model_dump_json())
 
 

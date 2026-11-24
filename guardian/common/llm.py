@@ -142,6 +142,8 @@ class LLMClient:
     default_model: str
     pricing: Mapping[str, Pricing] = field(default_factory=dict)
     clock: Callable[[], float] = time.perf_counter
+    # Cost of the most recent call, so a caller can attribute it (spec 05 F5.14).
+    last_cost: float = field(default=0.0, init=False)
 
     def chat(
         self,
@@ -230,6 +232,7 @@ class LLMClient:
         tokens_out: int = 0,
     ) -> None:
         price = self.pricing.get(request.model, Pricing())
+        self.last_cost = price.cost(tokens_in, tokens_out)
         row = LLMCall(
             run_id=run_id,
             purpose=purpose,
@@ -245,7 +248,7 @@ class LLMClient:
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             latency_ms=(self.clock() - started) * 1000,
-            cost=price.cost(tokens_in, tokens_out),
+            cost=self.last_cost,
         )
         with session_scope(self.sessions) as session:
             session.add(row)

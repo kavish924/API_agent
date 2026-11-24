@@ -41,8 +41,8 @@ spec drafted → reviewed → implemented → verified against acceptance criter
 | [`01-change-discovery.md`](./01-change-discovery.md) | Change watching, release gate, fan-out, version range | FR1, FR2 | 1 | In progress |
 | [`03-api-surface-diffing.md`](./03-api-surface-diffing.md) | API diff; confidence and symbol checks; API lookup | FR2 | 1 | Implemented |
 | [`02-extraction.md`](./02-extraction.md) | Structured extraction (LLM) | FR2 | 1 | Implemented |
-| [`04-repo-scanning.md`](./04-repo-scanning.md) | Repository scanning (libcst) | FR4 | 2 | Draft |
-| [`05-fix-generation.md`](./05-fix-generation.md) | Bump editor, codemods, single-shot fixer, AST guard | FR5 | 3 | Draft |
+| [`04-repo-scanning.md`](./04-repo-scanning.md) | Repository scanning (libcst) | FR4 | 2 | Implemented |
+| [`05-fix-generation.md`](./05-fix-generation.md) | Bump editor, codemods, single-shot fixer, AST guard | FR5 | 3 | Implemented |
 | [`06-verification.md`](./06-verification.md) | Two-phase sandbox verification, levels L1 to L3 | FR6 | 3 | Draft |
 | [`11-agent-fixer.md`](./11-agent-fixer.md) | Agent fixer: tools, budgets, step logging | FR5 | 4 | Draft |
 | [`07-github-integration.md`](./07-github-integration.md) | GitHub App: installs, upgrade PR, issue fallback | FR7 | 5 | Draft |

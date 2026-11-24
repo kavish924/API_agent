@@ -124,25 +124,25 @@ If time is short, protect those two.
 
 ## Phase 2 — Know the repo (week 2) — core
 
-- [ ] Spec 04 marked `Approved`
-- [ ] Scan pinned to the default-branch commit [F4.1]
-- [ ] libcst with `QualifiedNameProvider` and `ScopeProvider`: imports, aliases [F4.2]
-- [ ] Same-file client tracking and attribute-chain resolution [F4.3] — expect this to take most of the week
-- [ ] One-hop cross-module client, tagged separately [F4.4]
-- [ ] Parameter check: finding only when the keyword is passed [F4.5]
-- [ ] `TypedDict` key matching: keyword arguments and dict-literal keys [F4.13]
-- [ ] Default skips and `.guardianignore` [F4.6]
-- [ ] Findings with file, line, symbol, tier, confidence [F4.7]
-- [ ] No findings ends the run silently [F4.8]
-- [ ] Parse errors skipped with a warning [F4.9]
-- [ ] 500-file benchmark under 30 seconds [F4.10]
-- [ ] About 30 fixture cases built: direct import, alias, client variable, cross-module, wrapper, dynamic
-- [ ] 5 negative repos added
-- [ ] grep and libcst-without-resolution baselines [F8.3]
-- [ ] `make eval-scanner` runs; known-limit patterns reported separately [F8.4]
+- [x] Spec 04 marked `Approved` — and `Implemented`
+- [x] Scan pinned to the default-branch commit [F4.1] — local working tree for the CLI; the commit for installed repos comes with spec 07
+- [x] libcst with `QualifiedNameProvider` and `ScopeProvider`: imports, aliases [F4.2]
+- [x] Same-file client tracking and attribute-chain resolution [F4.3] — expect this to take most of the week
+- [x] One-hop cross-module client, tagged separately [F4.4]
+- [x] Parameter check: finding only when the keyword is passed [F4.5]
+- [x] `TypedDict` key matching: keyword arguments and dict-literal keys [F4.13]
+- [x] Default skips and `.guardianignore` [F4.6]
+- [x] Findings with file, line, symbol, tier, confidence [F4.7]
+- [x] No findings ends the run silently [F4.8]
+- [x] Parse errors skipped with a warning [F4.9]
+- [x] 500-file benchmark under 30 seconds [F4.10] — 3.5 s
+- [x] About 30 fixture cases built: direct import, alias, client variable, cross-module, wrapper, dynamic — 29 cases on real stripe and openai changes, in `evals/scanner/cases.py`
+- [x] 5 negative repos added
+- [x] grep and libcst-without-resolution baselines [F8.3]
+- [x] `make eval-scanner` runs; known-limit patterns reported separately [F8.4]
 
 **Exit**
-- [ ] Scanner eval recorded (target on in-scope patterns: recall ≥ 0.85, precision ≥ 0.90)
+- [x] Scanner eval recorded (target on in-scope patterns: recall ≥ 0.85, precision ≥ 0.90) — written cases: recall 1.00, precision 1.00 (grep 0.71); real-repo eval still to do
 - [ ] Decision on diff-only records: keep, or restrict to removals
 - [ ] Spec 04 marked `Verified`
 
@@ -151,17 +151,17 @@ If time is short, protect those two.
 ## Phase 3 — Bump, fix and verify (week 3)
 
 ### Fix generation (spec 05)
-- [ ] Specs 05 and 06 marked `Approved`
-- [ ] Bump editor: rewrites only the pinned version [F5.1]
-- [ ] Codemods: parameter rename, symbol rename, import path, literal replacement [F5.3]
-- [ ] Single-shot fixer (one LLM call, no tools) [F5.4]
-- [ ] Fixer mode switch: `agent` or `single-shot` [F5.5]
-- [ ] Non-fixable findings passed through as report-only [F5.6]
-- [ ] AST guard: changed statements must hold a finding or be an SDK import [F5.7]
-- [ ] Guard rejects new non-SDK imports, files without findings, non-`.py` files [F5.8]
-- [ ] Diff size cap; no partial application [F5.9, F5.10]
-- [ ] Patch assembly: bump and fixes in one patch; `partial` marking [F5.12, F5.13]
-- [ ] Adversarial diff test set for the guard written and passing
+- [ ] Specs 05 and 06 marked `Approved` — 05 approved 2026-11-24; 06 waits for the GCP Docker host
+- [x] Bump editor: rewrites only the pinned version [F5.1] — requirements (incl. `-r`), PEP 621, Poetry; lock files listed for the sandbox
+- [x] Codemods: parameter rename, symbol rename, import path, literal replacement [F5.3]
+- [x] Single-shot fixer (one LLM call, no tools) [F5.4] — tested with the stub; needs a real model
+- [x] Fixer mode switch: `agent` or `single-shot` [F5.5] — `GUARDIAN_FIX_MODE`, `--fix-mode`
+- [x] Non-fixable findings passed through as report-only [F5.6]
+- [x] AST guard: changed statements must hold a finding or be an SDK import [F5.7] — plus the new-names rule
+- [x] Guard rejects new non-SDK imports, files without findings, non-`.py` files [F5.8]
+- [x] Diff size cap; no partial application [F5.9, F5.10]
+- [x] Patch assembly: bump and fixes in one patch; `partial` marking [F5.12, F5.13]
+- [x] Adversarial diff test set for the guard written and passing — `tests/test_fix_guard.py`
 
 ### Verification (spec 06)
 - [ ] Install phase: PyPI-only network through an allow-listing proxy, no secrets [F6.1]
