@@ -66,9 +66,7 @@ def write(root: Path, files: dict[str, str]) -> Path:
     return root
 
 
-def scan(
-    root: Path, surfaces: tuple[Surface, Surface], changes: list[GradedChange]
-) -> ScanResult:
+def scan(root: Path, surfaces: tuple[Surface, Surface], changes: list[GradedChange]) -> ScanResult:
     return scan_repo(root, "pkg", surfaces[0], changes)
 
 
@@ -98,7 +96,7 @@ def test_keyword_rename_changes_only_the_argument_name(
         "engine = 'not a keyword argument'\n"
     )
     text, handled, _ = codemod(tmp_path, surfaces, changes, code)
-    assert text == code.replace("engine = \"e\"", "model = \"e\"")
+    assert text == code.replace('engine = "e"', 'model = "e"')
     assert handled == {0}
 
 
@@ -137,33 +135,56 @@ def test_a_change_without_a_codemod_is_left_for_tier_2(
     assert [f.rule for f in result.findings] == [R.KEYWORD]
 
 
-def _finding(line: int, column: int, rule: str, change: int | None = None,
-             query: int | None = None, param: str | None = None) -> Finding:
+def _finding(
+    line: int,
+    column: int,
+    rule: str,
+    change: int | None = None,
+    query: int | None = None,
+    param: str | None = None,
+) -> Finding:
     return Finding("app.py", line, column, "", "sym", rule, DIRECT, "high", change, query, param)
 
 
 def test_literal_replacement_keeps_quotes_and_follows_a_constant() -> None:
     code = "MODEL = 'gpt-old'\nclient.create(model=\"gpt-old\")\nclient.create(model=MODEL)\n"
-    findings = [_finding(2, 15, R.LITERAL, query=0, param="model"),
-                _finding(1, 1, R.LITERAL, query=0, param="model")]
+    findings = [
+        _finding(2, 15, R.LITERAL, query=0, param="model"),
+        _finding(1, 1, R.LITERAL, query=0, param="model"),
+    ]
     out = apply_codemods(code, findings, [], literal_replacements={0: "gpt-new"})
     assert out.text == code.replace("gpt-old", "gpt-new")
     assert out.handled == {0, 1}
 
 
 def test_typed_dict_key_rename_in_a_dict_literal() -> None:
-    change = GradedChange(FROM_DIFF, ChangeType.RENAMED, "pkg.P", "pkg.P", HIGH, True,
-                          affected_parameter="old_key", replacement="new_key",
-                          replacement_verified=True)
+    change = GradedChange(
+        FROM_DIFF,
+        ChangeType.RENAMED,
+        "pkg.P",
+        "pkg.P",
+        HIGH,
+        True,
+        affected_parameter="old_key",
+        replacement="new_key",
+        replacement_verified=True,
+    )
     code = "call(params={'old_key': 1, \"other\": 2})\n"
-    out = apply_codemods(code, [_finding(1, 14, R.DICT_KEY, change=0, param="old_key")],
-                         [change])
+    out = apply_codemods(code, [_finding(1, 14, R.DICT_KEY, change=0, param="old_key")], [change])
     assert out.text == "call(params={'new_key': 1, \"other\": 2})\n"
 
 
 def test_moved_module_import_path() -> None:
-    change = GradedChange(FROM_DIFF, ChangeType.RENAMED, "pkg.old", "pkg.old", HIGH, True,
-                          replacement="pkg.new", replacement_verified=True)
+    change = GradedChange(
+        FROM_DIFF,
+        ChangeType.RENAMED,
+        "pkg.old",
+        "pkg.old",
+        HIGH,
+        True,
+        replacement="pkg.new",
+        replacement_verified=True,
+    )
     code = "from pkg.old import Thing  # moved\n"
     out = apply_codemods(code, [_finding(1, 1, R.MODULE, change=0)], [change])
     assert out.text == "from pkg.new import Thing  # moved\n"
@@ -213,8 +234,14 @@ def patch_for(
     root = write(tmp_path / "repo", files)
     result = scan(root, surfaces, changes)
     patch = build_patch(
-        LocalRepoFiles(root), result.findings, changes, package="pkg", module="pkg",
-        old="1.0.0", new="2.0.0", **kwargs,  # type: ignore[arg-type]
+        LocalRepoFiles(root),
+        result.findings,
+        changes,
+        package="pkg",
+        module="pkg",
+        old="1.0.0",
+        new="2.0.0",
+        **kwargs,  # type: ignore[arg-type]
     )
     return patch, result
 
@@ -244,11 +271,16 @@ def test_single_shot_fixes_what_no_codemod_can(
     ctx: AppContext,
     stub: StubProvider,
 ) -> None:
-    stub.push(LLMResponse(data={"status": "fixed", "code": "def get(x):\n"
-                                "    return client.retrieve(x)\n"}, tokens_in=10))
+    stub.push(
+        LLMResponse(
+            data={"status": "fixed", "code": "def get(x):\n    return client.retrieve(x)\n"},
+            tokens_in=10,
+        )
+    )
     files = {"requirements.txt": "pkg==1.0.0\n", "app.py": APP}
-    patch, _ = patch_for(tmp_path, surfaces, changes, files, mode=MODE_SINGLE_SHOT,
-                         fixer=SingleShotFixer(ctx.llm))
+    patch, _ = patch_for(
+        tmp_path, surfaces, changes, files, mode=MODE_SINGLE_SHOT, fixer=SingleShotFixer(ctx.llm)
+    )
     assert patch.status == COMPLETE
     after = patch.files["app.py"][1]
     assert "    return client.retrieve(x)\n" in after
@@ -273,8 +305,9 @@ def test_a_rejected_model_diff_is_dropped_whole(
     hostile = "def get(x):\n    import subprocess\n    return client.retrieve(x)\n"
     stub.push(LLMResponse(data={"status": "fixed", "code": hostile}))
     files = {"requirements.txt": "pkg==1.0.0\n", "app.py": APP}
-    patch, _ = patch_for(tmp_path, surfaces, changes, files, mode=MODE_SINGLE_SHOT,
-                         fixer=SingleShotFixer(ctx.llm))
+    patch, _ = patch_for(
+        tmp_path, surfaces, changes, files, mode=MODE_SINGLE_SHOT, fixer=SingleShotFixer(ctx.llm)
+    )
     assert patch.status == PARTIAL
     failed = [f for f in patch.fixes if f.status == FIX_FAILED]
     assert len(failed) == 1 and "subprocess" in failed[0].reason
@@ -293,9 +326,14 @@ def test_cannot_fix_is_a_failed_fix(
 ) -> None:
     stub.push(LLMResponse(data={"status": "cannot-fix", "reason": "id is computed"}))
     code = 'import pkg\n\n\ndef get(x):\n    return pkg.Client("k").retrieve(id=x)\n'
-    patch, _ = patch_for(tmp_path, surfaces, changes, {"requirements.txt": "pkg==1.0.0\n",
-                                                       "app.py": code},
-                         mode=MODE_SINGLE_SHOT, fixer=SingleShotFixer(ctx.llm))
+    patch, _ = patch_for(
+        tmp_path,
+        surfaces,
+        changes,
+        {"requirements.txt": "pkg==1.0.0\n", "app.py": code},
+        mode=MODE_SINGLE_SHOT,
+        fixer=SingleShotFixer(ctx.llm),
+    )
     assert patch.status == NOTHING_FIXED
     assert [(f.status, f.reason) for f in patch.fixes] == [(FIX_FAILED, "id is computed")]
     assert set(patch.files) == {"requirements.txt"}  # the bump alone; spec 07 decides
@@ -321,8 +359,14 @@ def test_both_modes_give_results_of_the_same_shape(
     stub.push(LLMResponse(data={"status": "cannot-fix", "reason": "no"}))
     files = {"requirements.txt": "pkg==1.0.0\n", "app.py": APP}
     agent, _ = patch_for(tmp_path / "a", surfaces, changes, files, mode=MODE_AGENT)
-    single, _ = patch_for(tmp_path / "s", surfaces, changes, files, mode=MODE_SINGLE_SHOT,
-                          fixer=SingleShotFixer(ctx.llm))
+    single, _ = patch_for(
+        tmp_path / "s",
+        surfaces,
+        changes,
+        files,
+        mode=MODE_SINGLE_SHOT,
+        fixer=SingleShotFixer(ctx.llm),
+    )
     assert [f.index for f in agent.fixes] == [f.index for f in single.fixes]
     assert {f.status for f in agent.fixes} == {f.status for f in single.fixes}
 
@@ -331,8 +375,9 @@ def test_unfixable_changes_are_report_only_and_make_the_patch_partial(
     tmp_path: Path, surfaces: tuple[Surface, Surface], changes: list[GradedChange]
 ) -> None:
     code = "import pkg\nfrom pkg import Reversal\n\npkg.helper(1, b=2)\nReversal()\n"
-    patch, _ = patch_for(tmp_path, surfaces, changes, {"requirements.txt": "pkg==1.0.0\n",
-                                                       "app.py": code})
+    patch, _ = patch_for(
+        tmp_path, surfaces, changes, {"requirements.txt": "pkg==1.0.0\n", "app.py": code}
+    )
     statuses = sorted(f.status for f in patch.fixes)
     assert REPORT_ONLY in statuses and FIXED in statuses
     assert patch.status == PARTIAL and patch.partial
@@ -340,14 +385,20 @@ def test_unfixable_changes_are_report_only_and_make_the_patch_partial(
 
 
 def test_response_shape_change_gets_no_diff(tmp_path: Path) -> None:
-    change = GradedChange(FROM_DIFF, ChangeType.RESPONSE_SHAPE_CHANGED, "pkg.R", "pkg.R", HIGH,
-                          fixable=False)
+    change = GradedChange(
+        FROM_DIFF, ChangeType.RESPONSE_SHAPE_CHANGED, "pkg.R", "pkg.R", HIGH, fixable=False
+    )
     root = write(tmp_path, {"requirements.txt": "pkg==1.0.0\n", "app.py": "r.id\n"})
-    patch = build_patch(LocalRepoFiles(root), [_finding(1, 1, R.REFERENCE, change=0)], [change],
-                        package="pkg", module="pkg", old="1.0.0", new="2.0.0")
-    assert [(f.status, f.reason) for f in patch.fixes] == [
-        (REPORT_ONLY, "response-shape-changed")
-    ]
+    patch = build_patch(
+        LocalRepoFiles(root),
+        [_finding(1, 1, R.REFERENCE, change=0)],
+        [change],
+        package="pkg",
+        module="pkg",
+        old="1.0.0",
+        new="2.0.0",
+    )
+    assert [(f.status, f.reason) for f in patch.fixes] == [(REPORT_ONLY, "response-shape-changed")]
     assert patch.status == NOTHING_FIXED and set(patch.files) == {"requirements.txt"}
 
 
@@ -363,9 +414,18 @@ def test_a_failed_bump_means_no_patch_at_all(
 
 def test_api_level_runs_have_no_bump(tmp_path: Path) -> None:
     root = write(tmp_path, {"app.py": 'client.create(model="gpt-old")\n'})
-    patch = build_patch(LocalRepoFiles(root), [_finding(1, 15, R.LITERAL, query=0, param="model")],
-                        [], package="openai", module="openai", old="", new="",
-                        literal_replacements={0: "gpt-new"}, bump_version=False)
+    patch = build_patch(
+        LocalRepoFiles(root),
+        [_finding(1, 15, R.LITERAL, query=0, param="model")],
+        [],
+        package="openai",
+        module="openai",
+        old="",
+        new="",
+        literal_replacements={0: "gpt-new"},
+        bump_version=False,
+    )
     assert patch.status == COMPLETE
-    assert patch.files == {"app.py": ('client.create(model="gpt-old")\n',
-                                      'client.create(model="gpt-new")\n')}
+    assert patch.files == {
+        "app.py": ('client.create(model="gpt-old")\n', 'client.create(model="gpt-new")\n')
+    }

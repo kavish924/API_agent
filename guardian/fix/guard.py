@@ -239,8 +239,9 @@ def _diff(path: str, before: str, after: str) -> tuple[str, int]:
         for line in lines
         if line[:1] in "+-" and not line.startswith("+++") and not line.startswith("---")
     )
-    text = "".join(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
-                   for line in lines)
+    text = "".join(
+        line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines
+    )
     return text, changed
 
 

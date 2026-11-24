@@ -294,15 +294,27 @@ def _tier2(
     current = source
     for group in _groups(path, current, items, package=patch.package, old=patch.old, new=patch.new):
         group = FixGroup(
-            group.path, current, group.start, group.end, group.items,
-            group.package, group.old, group.new,
+            group.path,
+            current,
+            group.start,
+            group.end,
+            group.items,
+            group.package,
+            group.old,
+            group.new,
         )
         indexes = tuple(item.index for item in group.items)
         proposal = fixer.propose(group)
         if proposal.after is None:
             patch.attempts.append(
-                Attempt(fixer.name, path, indexes, accepted=False,
-                        reasons=[proposal.reason], cost=proposal.cost)
+                Attempt(
+                    fixer.name,
+                    path,
+                    indexes,
+                    accepted=False,
+                    reasons=[proposal.reason],
+                    cost=proposal.cost,
+                )
             )
             for item in group.items:
                 patch.fixes.append(
@@ -317,14 +329,22 @@ def _tier2(
             line_cap=line_cap,
         )
         patch.attempts.append(
-            Attempt(fixer.name, path, indexes, accepted=verdict.accepted, diff=verdict.diff,
-                    reasons=verdict.reasons, cost=proposal.cost)
+            Attempt(
+                fixer.name,
+                path,
+                indexes,
+                accepted=verdict.accepted,
+                diff=verdict.diff,
+                reasons=verdict.reasons,
+                cost=proposal.cost,
+            )
         )
         if not verdict.accepted:
             reason = "rejected by the AST guard: " + "; ".join(verdict.reasons)
             for item in group.items:
-                patch.fixes.append(FindingFix(item.index, FIX_FAILED, tier=fixer.name,
-                                              reason=reason))
+                patch.fixes.append(
+                    FindingFix(item.index, FIX_FAILED, tier=fixer.name, reason=reason)
+                )
             continue
         current = proposal.after
         for item in group.items:

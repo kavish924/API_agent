@@ -295,9 +295,7 @@ class _Planner(cst.CSTVisitor):
             if id(statement) in self.replace:
                 self._skip(index, SHAPE_UNSUPPORTED)
                 return
-            updated = statement.with_changes(
-                module=_dotted(rename.new_parent), names=[new_alias]
-            )
+            updated = statement.with_changes(module=_dotted(rename.new_parent), names=[new_alias])
             self._take(index, statement, updated)
         else:
             self._take(index, alias, new_alias)

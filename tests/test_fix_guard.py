@@ -8,7 +8,7 @@ from guardian.fix.guard import FileChange, GuardResult, check_patch
 
 PATH = "app/ask.py"
 
-BEFORE = '''import openai
+BEFORE = """import openai
 from app import helpers
 
 client = openai.OpenAI()
@@ -25,7 +25,7 @@ def ask(question):
 
 def other():
     return client.models.list()
-'''
+"""
 
 FINDING = 10  # the `create(...)` statement, where `max_tokens=` is passed
 GOOD = BEFORE.replace("max_tokens=10", "max_completion_tokens=10")
@@ -43,7 +43,7 @@ def test_the_fix_at_the_finding_is_accepted() -> None:
     result = check(GOOD)
     assert result.accepted, result.reasons
     assert result.changed_lines == 2
-    assert "-        model=\"gpt-4\", max_tokens=10" in result.diff
+    assert '-        model="gpt-4", max_tokens=10' in result.diff
 
 
 def test_a_multi_line_rewrite_of_the_matched_statement_is_accepted() -> None:
@@ -70,22 +70,24 @@ def test_a_name_bound_by_a_new_sdk_import_may_be_used() -> None:
     [
         # F5.8: an import of any other module.
         (GOOD.replace("import openai\n", "import openai\nimport subprocess\n"), "subprocess"),
-        (GOOD.replace("from app import helpers\n", "from app import helpers, secrets\n"),
-         "no finding"),
+        (
+            GOOD.replace("from app import helpers\n", "from app import helpers, secrets\n"),
+            "no finding",
+        ),
         # F5.7: a statement with no finding.
         (GOOD.replace("return helpers.clean(response)", "return response"), "no finding"),
         (GOOD.replace("return client.models.list()", "return []"), "no finding"),
         (GOOD.replace("@helpers.traced", "@helpers.logged"), "no finding"),
         (GOOD.replace("def ask(question):", "def ask(question, key=None):"), "no finding"),
         # A new statement next to the fix.
-        (GOOD.replace("    # Ask the model.\n", "    # Ask the model.\n    print(question)\n"),
-         "beyond the ones"),
+        (
+            GOOD.replace("    # Ask the model.\n", "    # Ask the model.\n    print(question)\n"),
+            "beyond the ones",
+        ),
         # New names wrapped around the matched call (the eval rule).
         (BEFORE.replace("response = client", "response = eval('1') or client"), "eval"),
-        (BEFORE.replace("messages=question", "messages=__import__('os').environ"),
-         "__import__"),
-        (BEFORE.replace("response = client.chat", "response = getattr(client, 'chat')"),
-         "getattr"),
+        (BEFORE.replace("messages=question", "messages=__import__('os').environ"), "__import__"),
+        (BEFORE.replace("response = client.chat", "response = getattr(client, 'chat')"), "getattr"),
         (BEFORE.replace("messages=question", "messages=open('/etc/passwd').read()"), "open"),
         (BEFORE.replace("max_tokens=10", "max_tokens=exec('x=1')"), "exec"),
         # The result must parse.
@@ -102,9 +104,7 @@ def test_adversarial_diffs_are_rejected(after: str, reason: str) -> None:
     "path", [".github/workflows/ci.yml", "pyproject.toml", "requirements.txt", "app/conf.cfg"]
 )
 def test_non_python_files_are_rejected(path: str) -> None:
-    result = check_patch(
-        [FileChange(path, "a: 1\n", "a: 2\n")], {path: [1]}, package="openai"
-    )
+    result = check_patch([FileChange(path, "a: 1\n", "a: 2\n")], {path: [1]}, package="openai")
     assert not result.accepted
     assert result.reasons == [f"{path}: only Python files may change"]
 
@@ -119,8 +119,9 @@ def test_a_file_without_findings_is_rejected() -> None:
 
 
 def test_creating_or_deleting_files_is_rejected() -> None:
-    created = check_patch([FileChange("app/new.py", None, "x = 1\n")], {"app/new.py": [1]},
-                          package="openai")
+    created = check_patch(
+        [FileChange("app/new.py", None, "x = 1\n")], {"app/new.py": [1]}, package="openai"
+    )
     deleted = check_patch([FileChange(PATH, BEFORE, None)], {PATH: [FINDING]}, package="openai")
     assert created.reasons == ["app/new.py: creates a file"]
     assert deleted.reasons == [f"{PATH}: deletes a file"]

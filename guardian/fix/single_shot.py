@@ -78,7 +78,7 @@ def build_messages(group: FixGroup) -> list[Message]:
         "<changes>\n"
         f"{json.dumps(_change_data(group), indent=2)}\n"
         "</changes>\n\n"
-        f"<region lines=\"{group.start}-{group.end}\">\n{numbered}\n</region>\n\n"
+        f'<region lines="{group.start}-{group.end}">\n{numbered}\n</region>\n\n'
         "Return the region without line numbers."
     )
     return [Message(role="user", content=content)]
@@ -116,8 +116,9 @@ class SingleShotFixer:
     def propose(self, group: FixGroup, feedback: str | None = None) -> Proposal:
         messages = build_messages(group)
         if feedback:
-            messages.append(Message(role="user", content=f"<guard-feedback>\n{feedback}\n"
-                                    "</guard-feedback>"))
+            messages.append(
+                Message(role="user", content=f"<guard-feedback>\n{feedback}\n</guard-feedback>")
+            )
         try:
             output = self.llm.structured(
                 purpose=PURPOSE,

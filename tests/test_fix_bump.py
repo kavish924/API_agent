@@ -44,8 +44,10 @@ def test_requirements_does_not_touch_a_similar_package_or_version(tmp_path: Path
 
 
 def test_requirements_followed_through_an_include(tmp_path: Path) -> None:
-    files = {"requirements.txt": "-r requirements/base.txt\n", "requirements/base.txt":
-             "stripe==9.0.0\n"}
+    files = {
+        "requirements.txt": "-r requirements/base.txt\n",
+        "requirements/base.txt": "stripe==9.0.0\n",
+    }
     result = B.bump(repo(tmp_path, files), "stripe", "9.0.0", "13.0.0")
     assert only_edit(result, "requirements/base.txt") == "stripe==13.0.0\n"
 
@@ -60,8 +62,10 @@ def test_hash_pinned_requirements_are_refused(tmp_path: Path) -> None:
 
 def test_a_range_that_allows_the_new_version_needs_only_the_lock(tmp_path: Path) -> None:
     lock = '[[package]]\nname = "openai"\nversion = "1.30.0"\n'
-    files = {"pyproject.toml": '[project]\nname = "app"\ndependencies = ["openai>=1.0"]\n',
-             "uv.lock": lock}
+    files = {
+        "pyproject.toml": '[project]\nname = "app"\ndependencies = ["openai>=1.0"]\n',
+        "uv.lock": lock,
+    }
     result = B.bump(repo(tmp_path, files), "openai", "1.30.0", "1.45.0")
     assert result.ok
     assert result.edits == {}
