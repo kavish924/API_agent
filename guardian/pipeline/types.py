@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 # Outcome used by every stage that is not built yet. Later phases replace it.
 NOT_IMPLEMENTED = "not-implemented"
+# The repository does not use anything that changed: the run ends quietly (spec 04 F4.8).
+NO_FINDINGS = "no-findings"
 
 # Poll outcomes.
 POLL_OK = "ok"
@@ -29,6 +31,7 @@ class RunRequest(BaseModel):
     to_version: str | None = None  # overrides "latest release"
     head_sha: str | None = None
     installation_id: int | None = None
+    fix_mode: str | None = None  # overrides the `fix_mode` setting (spec 05 F5.5)
 
 
 class RunResult(BaseModel):
@@ -53,7 +56,26 @@ class RunResult(BaseModel):
     changes_from_diff: int = 0  # breaks no release note mentions
     change_types: dict[str, int] = {}
     verification_level: str | None = None
+    # Scanning (spec 04).
+    run_id: int | None = None
     findings: int = 0
+    finding_sites: int = 0  # distinct places in the code
+    findings_by_tier: dict[str, int] = {}
+    files_scanned: int = 0
+    files_parsed: int = 0
+    files_skipped: int = 0
+    scan_seconds: float = 0.0
+    # Fix generation (spec 05).
+    patch_status: str | None = None  # complete | partial | nothing-fixed | could-not-bump
+    fix_mode: str | None = None
+    fixed: int = 0
+    report_only: int = 0
+    fix_failed: int = 0
+    patch_files: list[str] = []
+    lock_files: list[str] = []  # regenerated in the sandbox install phase (spec 06)
+    bump_problems: list[str] = []
+    patch_ref: str | None = None  # the unified diff, in the blob store
+    fix_cost: float = 0.0
 
 
 class PollResult(BaseModel):

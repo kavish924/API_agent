@@ -1,0 +1,1018 @@
+{
+ "run_at": "2026-11-18T07:41:36+00:00",
+ "sdks": {
+  "stripe": {
+   "package": "stripe",
+   "old": "15.6.2",
+   "new": "16.0.0"
+  },
+  "openai": {
+   "package": "openai",
+   "old": "2.0.0",
+   "new": "2.54.0"
+  }
+ },
+ "cases": 29,
+ "negative_cases": 5,
+ "targets": {
+  "recall": 0.85,
+  "precision": 0.9
+ },
+ "results": {
+  "in_scope": {
+   "scanner": {
+    "expected": 24,
+    "true_positives": 24,
+    "predicted": 24,
+    "found": 24,
+    "recall": 1.0,
+    "precision": 1.0
+   },
+   "libcst-by-name": {
+    "expected": 24,
+    "true_positives": 24,
+    "predicted": 32,
+    "found": 24,
+    "recall": 1.0,
+    "precision": 0.75
+   },
+   "grep": {
+    "expected": 24,
+    "true_positives": 24,
+    "predicted": 34,
+    "found": 24,
+    "recall": 1.0,
+    "precision": 0.7058823529411765
+   }
+  },
+  "known_limit": {
+   "scanner": {
+    "expected": 4,
+    "true_positives": 0,
+    "predicted": 0,
+    "found": 0,
+    "recall": 0.0,
+    "precision": null
+   },
+   "libcst-by-name": {
+    "expected": 4,
+    "true_positives": 2,
+    "predicted": 2,
+    "found": 2,
+    "recall": 0.5,
+    "precision": 1.0
+   },
+   "grep": {
+    "expected": 4,
+    "true_positives": 4,
+    "predicted": 4,
+    "found": 4,
+    "recall": 1.0,
+    "precision": 1.0
+   }
+  }
+ },
+ "meets_targets": true,
+ "per_case": [
+  {
+   "id": "s01-direct-removed-class",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "app.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "app.py",
+      3
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "app.py",
+      3
+     ]
+    ],
+    "grep": [
+     [
+      "app.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s02-from-import-removed-class",
+   "pattern": "aliased import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "app.py",
+     1
+    ],
+    [
+     "app.py",
+     5
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "app.py",
+      1
+     ],
+     [
+      "app.py",
+      5
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "app.py",
+      1
+     ],
+     [
+      "app.py",
+      5
+     ]
+    ],
+    "grep": [
+     [
+      "app.py",
+      1
+     ],
+     [
+      "app.py",
+      5
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s03-module-alias",
+   "pattern": "aliased import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "app.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "app.py",
+      3
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "app.py",
+      3
+     ]
+    ],
+    "grep": [
+     [
+      "app.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s04-removed-kwarg-one-line",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "pay.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "pay.py",
+      3
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "pay.py",
+      3
+     ]
+    ],
+    "grep": [
+     [
+      "pay.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s05-removed-kwarg-multi-line",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "pay.py",
+     8
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "pay.py",
+      8
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "pay.py",
+      8
+     ]
+    ],
+    "grep": [
+     [
+      "pay.py",
+      8
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s06-inherited-method-via-return-type",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "sync.py",
+     4
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "sync.py",
+      4
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "sync.py",
+      4
+     ]
+    ],
+    "grep": [
+     [
+      "sync.py",
+      3
+     ],
+     [
+      "sync.py",
+      4
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s07-stripeclient-positional-only",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "app.py",
+     4
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "app.py",
+      4
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "app.py",
+      4
+     ]
+    ],
+    "grep": [
+     [
+      "app.py",
+      4
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s08-self-attribute",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "billing.py",
+     9
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "billing.py",
+      9
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "billing.py",
+      9
+     ]
+    ],
+    "grep": [
+     [
+      "billing.py",
+      9
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s09-annotated-parameter",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "jobs.py",
+     5
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "jobs.py",
+      5
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "jobs.py",
+      5
+     ]
+    ],
+    "grep": [
+     [
+      "jobs.py",
+      5
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s10-class-level-annotation",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "svc.py",
+     8
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "svc.py",
+      8
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "svc.py",
+      8
+     ]
+    ],
+    "grep": [
+     [
+      "svc.py",
+      8
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s11-cross-module-client",
+   "pattern": "cross-module",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "app/billing.py",
+     5
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "app/billing.py",
+      5
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "app/billing.py",
+      5
+     ]
+    ],
+    "grep": [
+     [
+      "app/billing.py",
+      5
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s12-relative-cross-module-client",
+   "pattern": "cross-module",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "shop/orders.py",
+     5
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "shop/orders.py",
+      5
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "shop/orders.py",
+      5
+     ]
+    ],
+    "grep": [
+     [
+      "shop/orders.py",
+      5
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s13-classmethod-positional-only",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "coupons.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "coupons.py",
+      3
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "coupons.py",
+      3
+     ]
+    ],
+    "grep": [
+     [
+      "coupons.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s14-async-call",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "worker.py",
+     5
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "worker.py",
+      5
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "worker.py",
+      5
+     ]
+    ],
+    "grep": [
+     [
+      "worker.py",
+      5
+     ]
+    ]
+   }
+  },
+  {
+   "id": "s15-type-annotation",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "types.py",
+     4
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "types.py",
+      4
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "types.py",
+      4
+     ]
+    ],
+    "grep": [
+     [
+      "types.py",
+      4
+     ]
+    ]
+   }
+  },
+  {
+   "id": "k01-factory-function",
+   "pattern": "wrapper",
+   "in_scope": false,
+   "negative": false,
+   "expected": [
+    [
+     "app.py",
+     8
+    ]
+   ],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [
+     [
+      "app.py",
+      8
+     ]
+    ],
+    "grep": [
+     [
+      "app.py",
+      8
+     ]
+    ]
+   }
+  },
+  {
+   "id": "k02-getattr",
+   "pattern": "dynamic",
+   "in_scope": false,
+   "negative": false,
+   "expected": [
+    [
+     "app.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [],
+    "grep": [
+     [
+      "app.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "k03-params-dict-splat",
+   "pattern": "dynamic",
+   "in_scope": false,
+   "negative": false,
+   "expected": [
+    [
+     "pay.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [],
+    "grep": [
+     [
+      "pay.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "k04-wrapper-class",
+   "pattern": "wrapper",
+   "in_scope": false,
+   "negative": false,
+   "expected": [
+    [
+     "gateway.py",
+     12
+    ]
+   ],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [
+     [
+      "gateway.py",
+      12
+     ]
+    ],
+    "grep": [
+     [
+      "gateway.py",
+      12
+     ]
+    ]
+   }
+  },
+  {
+   "id": "n01-unchanged-stripe-usage",
+   "pattern": "negative",
+   "in_scope": true,
+   "negative": true,
+   "expected": [],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [],
+    "grep": []
+   }
+  },
+  {
+   "id": "n02-same-names-not-stripe",
+   "pattern": "negative",
+   "in_scope": true,
+   "negative": true,
+   "expected": [],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [
+     [
+      "app.py",
+      4
+     ],
+     [
+      "app.py",
+      10
+     ],
+     [
+      "app.py",
+      18
+     ],
+     [
+      "app.py",
+      19
+     ],
+     [
+      "app.py",
+      20
+     ]
+    ],
+    "grep": [
+     [
+      "app.py",
+      4
+     ],
+     [
+      "app.py",
+      10
+     ],
+     [
+      "app.py",
+      18
+     ],
+     [
+      "app.py",
+      19
+     ],
+     [
+      "app.py",
+      20
+     ]
+    ]
+   }
+  },
+  {
+   "id": "n03-requests-library",
+   "pattern": "negative",
+   "in_scope": true,
+   "negative": true,
+   "expected": [],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [
+     [
+      "http.py",
+      5
+     ],
+     [
+      "http.py",
+      6
+     ]
+    ],
+    "grep": [
+     [
+      "http.py",
+      4
+     ],
+     [
+      "http.py",
+      5
+     ],
+     [
+      "http.py",
+      6
+     ]
+    ]
+   }
+  },
+  {
+   "id": "o01-removed-typeddict-keys",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "agent.py",
+     9
+    ],
+    [
+     "agent.py",
+     10
+    ],
+    [
+     "agent.py",
+     11
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "agent.py",
+      9
+     ],
+     [
+      "agent.py",
+      10
+     ],
+     [
+      "agent.py",
+      11
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "agent.py",
+      9
+     ],
+     [
+      "agent.py",
+      10
+     ],
+     [
+      "agent.py",
+      11
+     ]
+    ],
+    "grep": [
+     [
+      "agent.py",
+      9
+     ],
+     [
+      "agent.py",
+      10
+     ],
+     [
+      "agent.py",
+      11
+     ]
+    ]
+   }
+  },
+  {
+   "id": "o02-removed-type-import",
+   "pattern": "aliased import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "realtime.py",
+     1
+    ],
+    [
+     "realtime.py",
+     3
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "realtime.py",
+      1
+     ],
+     [
+      "realtime.py",
+      3
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "realtime.py",
+      1
+     ],
+     [
+      "realtime.py",
+      3
+     ]
+    ],
+    "grep": [
+     [
+      "realtime.py",
+      1
+     ],
+     [
+      "realtime.py",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "o03-removed-module-import",
+   "pattern": "aliased import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "realtime.py",
+     1
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "realtime.py",
+      1
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "realtime.py",
+      1
+     ]
+    ],
+    "grep": [
+     [
+      "realtime.py",
+      1
+     ]
+    ]
+   }
+  },
+  {
+   "id": "o04-removed-module-plain-import",
+   "pattern": "direct import",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "realtime.py",
+     1
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "realtime.py",
+      1
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "realtime.py",
+      1
+     ]
+    ],
+    "grep": [
+     [
+      "realtime.py",
+      1
+     ]
+    ]
+   }
+  },
+  {
+   "id": "o05-async-client-keys",
+   "pattern": "client variable",
+   "in_scope": true,
+   "negative": false,
+   "expected": [
+    [
+     "agent.py",
+     7
+    ]
+   ],
+   "predicted": {
+    "scanner": [
+     [
+      "agent.py",
+      7
+     ]
+    ],
+    "libcst-by-name": [
+     [
+      "agent.py",
+      7
+     ]
+    ],
+    "grep": [
+     [
+      "agent.py",
+      7
+     ]
+    ]
+   }
+  },
+  {
+   "id": "n04-unchanged-openai-usage",
+   "pattern": "negative",
+   "in_scope": true,
+   "negative": true,
+   "expected": [],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [],
+    "grep": []
+   }
+  },
+  {
+   "id": "n05-same-keys-not-openai",
+   "pattern": "negative",
+   "in_scope": true,
+   "negative": true,
+   "expected": [],
+   "predicted": {
+    "scanner": [],
+    "libcst-by-name": [
+     [
+      "layout.py",
+      4
+     ]
+    ],
+    "grep": [
+     [
+      "layout.py",
+      4
+     ]
+    ]
+   }
+  }
+ ]
+}

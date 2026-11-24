@@ -92,6 +92,9 @@ records about symbols that never existed are dropped.
 - Runtime or behavioural differences; only the symbol surface.
 
 ## Open questions / decisions
+- 2026-11-18 (implementation, spec 04): an unannotated attribute is typed from the
+  constructor call that builds it (`self.v1 = V1Services(...)`), so Stripe's
+  `client.v1.*` services resolve. Surface format 2; cached surfaces are rebuilt.
 - 2026-11-14 (implementation): a version's API is reduced to a **surface**: a small
   model of public names, classes, methods, parameters and `TypedDict` keys, cached as
   JSON in the blob store (about 4–5 MB per version for Stripe and openai). Comparison,

@@ -7,6 +7,7 @@ logs or reprs.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,11 @@ class Settings(BaseSettings):
 
     llm_provider: str = "none"
     llm_model: str = ""
+
+    # Tier 2 fixer (spec 05 F5.5): `agent` (spec 11) or `single-shot`.
+    fix_mode: Literal["agent", "single-shot"] = "agent"
+    # Changed lines allowed per finding in a model-written diff (F5.9).
+    fix_line_cap: int = 40
 
     # Optional token for reading public release data. Without it GitHub allows 60
     # requests an hour, which is enough for local use.

@@ -14,7 +14,7 @@ import httpx
 
 from guardian.apidiff.reconcile import FROM_DIFF, HIGH, GradedChange, reconcile
 from guardian.apidiff.service import ApiDiffService
-from guardian.apidiff.surface import SurfaceError
+from guardian.apidiff.surface import Surface, SurfaceError
 from guardian.apidiff.wheels import WheelError
 from guardian.common.context import AppContext
 from guardian.common.llm import LLMError
@@ -43,6 +43,7 @@ class Grading:
     api_diff_error: str | None = None
     changes: list[GradedChange] = field(default_factory=list)
     dropped: int = 0
+    old_surface: Surface | None = None  # the API the repository is on, for the scanner
 
     def summary(self) -> dict[str, int]:
         return {
@@ -96,6 +97,7 @@ def grade_range(ctx: AppContext, source: SdkSource, version_range: RangeResult) 
         )
         return grading
 
+    grading.old_surface = old_surface
     reconciled = reconcile(grading.records, old_surface, new_surface, diff)
     grading.changes = reconciled.changes
     grading.dropped = len(reconciled.dropped)

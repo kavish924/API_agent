@@ -4,7 +4,7 @@
 
 VENV_PY := $(if $(wildcard .venv/Scripts/python.exe),.venv/Scripts/python.exe,.venv/bin/python)
 
-.PHONY: dev test lint types check migrate eval-extraction
+.PHONY: dev test lint types check migrate eval-extraction eval-scanner
 
 dev:
 	python scripts/dev.py
@@ -27,3 +27,7 @@ migrate:
 # Needs a configured LLM provider; writes evals/results/extraction-<time>.json
 eval-extraction:
 	$(VENV_PY) -m guardian.extract.evaluation
+
+# Fetches SDK wheels from PyPI once (cached); or pass ARGS="--wheels DIR"
+eval-scanner:
+	$(VENV_PY) -m guardian.scan.evaluation $(ARGS)

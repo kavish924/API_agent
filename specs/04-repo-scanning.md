@@ -1,5 +1,9 @@
 # Spec 04 — Repository scanning
-Status: Draft · Phase: 2 · PRD v3 ref: FR4 · Depends on: 00-foundation, 02-extraction, 03-api-surface-diffing
+Status: Implemented · Phase: 2 · PRD v3 ref: FR4 · Depends on: 00-foundation, 02-extraction, 03-api-surface-diffing
+
+> Approved by instruction on 2026-11-18 ("start phase 2") and implemented the same
+> day. Moves to `Verified` once the scanner eval has run on the 6–8 real repositories
+> the spec 08 plan asks for; so far it has run on 29 written cases (see below).
 
 ## Goal
 For a run's change records and the repository at the default branch head, find the exact
@@ -31,17 +35,17 @@ and low noise are the product.
 | F4.13 | **`TypedDict` key matching** (for spec 03 F3.14): a removed or renamed params key is found when passed (a) as a keyword argument to a method that takes that params type as `**params` (Stripe style), or (b) as a key of a dict literal passed to the argument typed with it, one level deep, including dicts inside a list literal (for example `tools=[{"type": …, "display_width": …}]`) |
 
 ## Acceptance criteria
-- [ ] GIVEN `from openai import OpenAI as OAI` and `OAI().chat.completions.create(...)`, WHEN scanning for a change on that method, THEN the call is found through the alias.
-- [ ] GIVEN `import openai as oa` and `oa.OpenAI()`, THEN the client is resolved the same way.
-- [ ] GIVEN a change renaming keyword `engine`, and two calls of which one passes `engine=`, THEN exactly one finding.
-- [ ] GIVEN a repo that imports the SDK but never uses the changed symbol, THEN zero findings and outcome `no-findings`.
-- [ ] GIVEN a matching call inside `vendor/` listed in `.guardianignore`, THEN it produces no finding.
-- [ ] GIVEN a Python file with a syntax error, THEN it is skipped with a warning and other files are scanned.
-- [ ] GIVEN a local function named `create` unrelated to the SDK, THEN it is not matched (no name-only matching).
-- [ ] GIVEN a search for literal `"X"` on argument `model`, THEN `create(model="X")` on a resolved client matches, and the same string in an unrelated call, a comment or a docstring does not.
-- [ ] GIVEN `client.audio.speech.create(model="tts-1")`, THEN the match records API family `audio.speech`.
-- [ ] GIVEN a removed params key `display_width` and `create(tools=[{"type": "computer", "display_width": 1024}])`, THEN one finding points at that dict key; GIVEN `stripe.Customer.create(coupon="x")` and a removed key `coupon`, THEN one finding points at that keyword.
-- [ ] A 500-file benchmark repo scans in under 30 seconds.
+- [x] GIVEN `from openai import OpenAI as OAI` and `OAI().chat.completions.create(...)`, WHEN scanning for a change on that method, THEN the call is found through the alias.
+- [x] GIVEN `import openai as oa` and `oa.OpenAI()`, THEN the client is resolved the same way.
+- [x] GIVEN a change renaming keyword `engine`, and two calls of which one passes `engine=`, THEN exactly one finding.
+- [x] GIVEN a repo that imports the SDK but never uses the changed symbol, THEN zero findings and outcome `no-findings`.
+- [x] GIVEN a matching call inside `vendor/` listed in `.guardianignore`, THEN it produces no finding.
+- [x] GIVEN a Python file with a syntax error, THEN it is skipped with a warning and other files are scanned.
+- [x] GIVEN a local function named `create` unrelated to the SDK, THEN it is not matched (no name-only matching).
+- [x] GIVEN a search for literal `"X"` on argument `model`, THEN `create(model="X")` on a resolved client matches, and the same string in an unrelated call, a comment or a docstring does not.
+- [x] GIVEN `client.audio.speech.create(model="tts-1")`, THEN the match records API family `audio.speech`. *Tested on the fixture SDK and the family map; the real openai audio call is checked when spec 10 is built.*
+- [x] GIVEN a removed params key `display_width` and `create(tools=[{"type": "computer", "display_width": 1024}])`, THEN one finding points at that dict key; GIVEN `stripe.Customer.create(coupon="x")` and a removed key `coupon`, THEN one finding points at that keyword.
+- [x] A 500-file benchmark repo scans in under 30 seconds. *3.5 s for 500 files, 50 of them using the SDK.*
 
 ## Technical notes
 - Match tiers, from most to least certain: direct qualified name → aliased import →
@@ -71,8 +75,48 @@ and low noise are the product.
 - Languages other than Python.
 
 ## Open questions / decisions
-- Is a positional argument ever affected by a parameter rename in the two SDKs? If
-  yes, F4.5 needs a positional rule. Check during Phase 2.
+- 2026-11-18 (resolved): is a positional argument ever affected by a parameter
+  rename? Not in the measured ranges: stripe 15.6.2 → 16.0.0 and openai 2.0.0 → 2.54.0
+  have no parameter renames at all, and Stripe's 1,034 positional-only changes break
+  only keyword use, which F4.5 already checks. Revisit if a later diff reports
+  `param-renamed` on a parameter that can be passed positionally.
+- 2026-11-18 (implementation): names are resolved through the **old version's API
+  surface** (spec 03), never by spelling. That is what makes inheritance
+  (`customer.request` → `StripeObject.request`) and client properties
+  (`client.chat.completions.create`, `client.v1.customers.retrieve`) resolve.
+- 2026-11-18 (implementation): types are inferred from imports, assignments, `with ...
+  as`, annotated parameters, class-level declarations, `self.x = ...`, what an SDK
+  method or property returns, and constructor calls. A name bound to two different
+  things, or to anything unknown, is not guessed; only a `x = None` placeholder is
+  ignored.
+- 2026-11-18 (implementation): tiers and confidence: `direct`, `aliased` and
+  `client-variable` are high; `cross-module` and `shape-match` are medium. A finding's
+  confidence is the lower of its tier's and its change's (a rename inferred from names
+  alone is medium).
+- 2026-11-18 (implementation): `shape-match` is a new tier. When a parameter is typed
+  with a union alias (openai's `tools: Iterable[ToolParam]`), the dict literal is
+  matched to a `TypedDict` only if all its keys are keys of that type and there are at
+  least two. Without it, openai's removed `ComputerToolParam` keys could not be found.
+- 2026-11-18 (implementation): a `MISSING` finding (a newly required parameter not
+  passed) is not claimed when the call splats `**kwargs`. Positional passing of a new
+  required parameter is not checked.
+- 2026-11-18 (implementation): when the diff reports one break both as a removed
+  `**params` keyword and as a removed `TypedDict` key, only one finding is made per call.
+- 2026-11-18 (implementation): local CLI runs are stored too, under a repo named
+  `local:<path>` with installation 0; the head is the git commit, marked `-dirty` if
+  the working tree has changes. Findings point at change records stored per version
+  range (`from..to`), so diff-only changes have a row to point at.
+- 2026-11-18 (implementation): the surface now types an unannotated attribute from the
+  constructor it is built with (`self.v1 = V1Services(...)`). Without it Stripe's
+  `client.v1.*` services did not resolve. This changed the surface format to 2 (spec 03).
+- 2026-11-18 (eval): 29 written cases on the real stripe 15.6.2 → 16.0.0 and openai
+  2.0.0 → 2.54.0 changes, 5 of them negative and 4 known limits. In scope: recall 1.00
+  (24/24), precision 1.00; libcst by name 0.75 and grep 0.71 precision. Known limits:
+  0/4, as expected. One "false positive" in the first run was a labelling mistake (a
+  real use of a removed type that the case had not marked). The cases were written
+  while building the scanner, so they are not an independent test; the real-repository
+  eval is.
+
 - 2026-11-13 (spike): API family recorded on literal matches (F4.12) and `TypedDict`
   key matching added (F4.13), following from the spike's changes to specs 03 and 10.
 - 2026-11-13 (v3): the scan target is the default branch head, not a bump branch;

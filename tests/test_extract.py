@@ -442,7 +442,8 @@ def test_run_grades_notes_and_diff_together(
     assert result.changes_high >= 1 and result.changes_fixable >= 1
     assert result.changes_from_diff == result.changes - 1  # everything else came from the diff
     assert result.change_types["signature-changed"] >= 1
-    assert result.reason == "changes graded; scanning and fixing are not built yet"
+    # The repo only has a requirements file, so nothing uses what changed (spec 04 F4.8).
+    assert result.outcome == "no-findings" and result.findings == 0
 
 
 def test_run_without_a_model_still_grades_the_diff(
