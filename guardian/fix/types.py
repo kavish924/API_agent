@@ -55,6 +55,9 @@ class Proposal:
     after: str | None  # the whole file, rewritten; None when the fixer gave up
     reason: str = ""
     cost: float = 0.0
+    # What a give-up means: the agent's `cannot_fix` and budget limits make the finding
+    # report-only (spec 11 F11.10, F11.15); a failed model call is a failed fix.
+    give_up_status: str = FIX_FAILED
 
 
 class Tier2Fixer(Protocol):
