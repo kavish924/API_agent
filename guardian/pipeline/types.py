@@ -55,7 +55,8 @@ class RunResult(BaseModel):
     changes_fixable: int = 0
     changes_from_diff: int = 0  # breaks no release note mentions
     change_types: dict[str, int] = {}
-    verification_level: str | None = None
+    verification_level: str | None = None  # L0 | L1 | L2 (interim static; L3 with spec 06)
+    verification: dict[str, list[str]] = {}  # errors, remaining work and notes, by kind
     # Scanning (spec 04).
     run_id: int | None = None
     findings: int = 0

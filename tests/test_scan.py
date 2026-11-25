@@ -488,7 +488,9 @@ def test_run_scans_a_local_checkout_end_to_end(
     assert result.patch_ref is not None
     patch = ctx.blobs.get(result.patch_ref).decode("utf-8")
     assert "+openai==2.0.0" in patch and '+c.create("x", model="e")' in patch
-    assert result.reason == "patch built; verification is not built yet (spec 06)"
+    assert result.reason == "patch built and verified to L2 (static; tests not run)"
+    assert result.verification_level == "L2"
+    assert result.verification["notes"][0].startswith("tests were not run")
 
     (repo / "app" / "llm.py").write_text(
         "import openai\nopenai.Client('k').close()\n", encoding="utf-8"

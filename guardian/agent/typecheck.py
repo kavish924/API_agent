@@ -98,9 +98,19 @@ def new_errors(before: list[TypeIssue], after: list[TypeIssue]) -> list[TypeIssu
 class StaticTypeChecker:
     """mypy over a temporary copy of the checkout, with the new SDK unpacked beside it."""
 
-    def __init__(self, checkout: Path, sdk_dir: Callable[[], Path]) -> None:
+    def __init__(
+        self,
+        checkout: Path,
+        sdk_dir: Callable[[], Path],
+        *,
+        base_sdk_dir: Callable[[], Path] | None = None,
+    ) -> None:
         self.checkout = checkout.resolve()
         self._sdk_dir = sdk_dir  # lazy: the wheel is fetched on the first check only
+        # The SDK the unpatched files are checked against. The agent compares against
+        # the new SDK (what its edit adds); verification compares the repo as it is,
+        # on its pinned SDK, with the patched repo on the new one (spec 06 F6.4).
+        self._base_sdk_dir = base_sdk_dir
 
     def new_errors(self, before: Mapping[str, str], after: Mapping[str, str]) -> list[TypeIssue]:
         try:
@@ -108,12 +118,13 @@ class StaticTypeChecker:
         except ImportError as exc:
             raise TypecheckUnavailable("mypy is not installed") from exc
         sdk = self._sdk_dir()
+        base_sdk = self._base_sdk_dir() if self._base_sdk_dir is not None else sdk
         with tempfile.TemporaryDirectory(prefix="guardian-typecheck-") as temp:
             work = Path(temp)
             copy = work / "repo"
             self._copy(copy)
-            base = self._run(copy, work, sdk, before)
-            fixed = self._run(copy, work, sdk, after)
+            base = self._run(copy, work / "cache-base", base_sdk, before)
+            fixed = self._run(copy, work / "cache-fixed", sdk, after)
         return new_errors(base, fixed)
 
     def _copy(self, destination: Path) -> None:
@@ -125,7 +136,7 @@ class StaticTypeChecker:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source.path, target)
 
-    def _run(self, copy: Path, work: Path, sdk: Path, files: Mapping[str, str]) -> list[TypeIssue]:
+    def _run(self, copy: Path, cache: Path, sdk: Path, files: Mapping[str, str]) -> list[TypeIssue]:
         for relative, text in files.items():
             target = copy / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +157,7 @@ class StaticTypeChecker:
             "--hide-error-context",
             "--no-color-output",
             "--cache-dir",
-            str(work / "cache"),
+            str(cache),
             *sorted(files),
         ]
         environment = {

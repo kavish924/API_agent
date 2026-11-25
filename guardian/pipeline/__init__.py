@@ -64,6 +64,7 @@ from guardian.scan.store import (
     record_fixes,
     record_scan,
 )
+from guardian.verify.static import Verification, verify_static
 from guardian.watch.depfiles import NOT_USED, LocalRepoFiles, find_pin
 from guardian.watch.documents import StoredDocument
 from guardian.watch.github import SourceError
@@ -315,8 +316,51 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
         line_cap=ctx.settings.fix_line_cap,
     )
     _record_patch(ctx, result, scan.findings, patch, mode)
-    result.reason = "patch built; verification is not built yet (spec 06)"
+    checker = StaticTypeChecker(
+        checkout,
+        lambda: _wheel(ctx, source.package, version_range.new or ""),
+        base_sdk_dir=lambda: _wheel(ctx, source.package, version_range.old or ""),
+    )
+    _verify(result, scan.findings, patch, checker)
     return result
+
+
+def _wheel(ctx: AppContext, package: str, version: str) -> Path:
+    return cached_wheel(
+        ctx.http, package, version, ctx.settings.work_dir / "wheels", sleep=ctx.sleep
+    )
+
+
+def _verify(
+    result: RunResult,
+    findings: Sequence[Finding],
+    patch: PatchSet,
+    checker: StaticTypeChecker,
+) -> Verification | None:
+    """Interim static L1/L2 on the patch (decision 2026-11-25), recorded on the result."""
+    if not patch.count(FIXED):
+        result.reason = "nothing was fixed: the findings go to an issue (spec 07)"
+        return None
+    left: dict[str, list[int]] = {}
+    for fix in patch.fixes:
+        if fix.status != FIXED:
+            finding = findings[fix.index]
+            left.setdefault(finding.file, []).append(finding.line)
+    verification = verify_static(patch.files, checker, report_only_lines=left)
+    result.verification_level = verification.level
+    result.verification = {
+        "compile_errors": verification.compile_errors,
+        "lint_errors": verification.lint_errors,
+        "type_errors": verification.type_errors,
+        "remaining": verification.remaining,
+        "notes": verification.notes,
+    }
+    result.reason = (
+        f"patch built and verified to {verification.level} (static; tests not run)"
+        if verification.verified
+        else "the patch could not be verified: it goes to an issue (spec 07)"
+    )
+    return verification
 
 
 def _run_api(request: RunRequest, ctx: AppContext, api: ApiSource) -> RunResult:
@@ -384,7 +428,9 @@ def _run_api(request: RunRequest, ctx: AppContext, api: ApiSource) -> RunResult:
     if patch.files:
         key = f"patches/run-{result.run_id}.diff"
         result.patch_ref = ctx.blobs.put(key, patch.diff().encode("utf-8"))
-    result.reason = "patch built; verification is not built yet (spec 06)"
+    # One environment: no bump, so base and fixed share the SDK (F10.11).
+    checker = StaticTypeChecker(checkout, lambda: _wheel(ctx, sdk.package, version))
+    _verify(result, outcome.findings, patch, checker)
     return result
 
 
@@ -407,9 +453,7 @@ def _agent(
     assert result.run_id is not None
 
     def sdk_dir() -> Path:
-        return cached_wheel(
-            ctx.http, source.package, new_version, settings.work_dir / "wheels", sleep=ctx.sleep
-        )
+        return _wheel(ctx, source.package, new_version)
 
     return AgentFixer(
         ctx.llm,
