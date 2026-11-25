@@ -166,3 +166,15 @@ def record_fixes(
         run = session.get(Run, run_id)
         if run is not None:
             run.status = "fixed"
+
+
+def finding_row_ids(
+    sessions: SessionFactory, run_id: int, findings: Sequence[ScanFinding]
+) -> dict[int, int]:
+    """Finding index -> `findings.id`, for rows `record_scan` wrote (agent step logging)."""
+    stored = [index for index, finding in enumerate(findings) if finding.change is not None]
+    with session_scope(sessions) as session:
+        ids = list(
+            session.scalars(select(Finding.id).where(Finding.run_id == run_id).order_by(Finding.id))
+        )
+    return dict(zip(stored, ids, strict=False))

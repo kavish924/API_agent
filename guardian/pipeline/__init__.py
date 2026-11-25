@@ -18,6 +18,8 @@ from typing import Any
 import httpx
 from sqlalchemy import select
 
+from guardian.agent import AgentFixer, Budget, StaticTypeChecker, Workspace
+from guardian.apidiff.wheels import cached_wheel
 from guardian.common.context import AppContext
 from guardian.common.db import session_scope
 from guardian.common.jobs import InProcessQueue, Job, JobType
@@ -26,6 +28,7 @@ from guardian.common.models import Repo
 from guardian.fix import (
     FIX_FAILED,
     FIXED,
+    MODE_AGENT,
     MODE_SINGLE_SHOT,
     MODES,
     REPORT_ONLY,
@@ -34,7 +37,7 @@ from guardian.fix import (
     Tier2Fixer,
     build_patch,
 )
-from guardian.pipeline.grade import grade_range
+from guardian.pipeline.grade import Grading, grade_range
 from guardian.pipeline.types import (
     GATE_APPLIED,
     GATE_NOT_NEEDED,
@@ -51,7 +54,13 @@ from guardian.pipeline.types import (
 )
 from guardian.scan.analyzer import Finding
 from guardian.scan.scanner import scan_repo
-from guardian.scan.store import LOCAL_INSTALLATION, local_identity, record_fixes, record_scan
+from guardian.scan.store import (
+    LOCAL_INSTALLATION,
+    finding_row_ids,
+    local_identity,
+    record_fixes,
+    record_scan,
+)
 from guardian.watch.depfiles import LocalRepoFiles
 from guardian.watch.documents import StoredDocument
 from guardian.watch.github import SourceError
@@ -272,6 +281,8 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
     fixer: Tier2Fixer | None = None
     if mode == MODE_SINGLE_SHOT:
         fixer = SingleShotFixer(ctx.llm, run_id=result.run_id)
+    elif mode == MODE_AGENT:
+        fixer = _agent(ctx, source, checkout, version_range.new, grading, scan.findings, result)
     patch = build_patch(
         files,
         scan.findings,
@@ -287,6 +298,43 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
     _record_patch(ctx, result, scan.findings, patch, mode)
     result.reason = "patch built; verification is not built yet (spec 06)"
     return result
+
+
+def _agent(
+    ctx: AppContext,
+    source: SdkSource,
+    checkout: Path,
+    new_version: str,
+    grading: Grading,
+    findings: Sequence[Finding],
+    result: RunResult,
+) -> AgentFixer:
+    settings = ctx.settings
+    assert result.run_id is not None
+
+    def sdk_dir() -> Path:
+        return cached_wheel(
+            ctx.http, source.package, new_version, settings.work_dir / "wheels", sleep=ctx.sleep
+        )
+
+    return AgentFixer(
+        ctx.llm,
+        Workspace(checkout),
+        module=source.module,
+        new_surface=grading.new_surface,
+        typechecker=StaticTypeChecker(checkout, sdk_dir),
+        budget=Budget(
+            max_steps=settings.agent_max_steps,
+            max_proposals=settings.agent_max_proposals,
+            max_tokens=settings.agent_max_tokens,
+            max_seconds=settings.agent_max_seconds,
+            run_cost_cap=settings.agent_run_cost_cap,
+        ),
+        sessions=ctx.sessions,
+        run_id=result.run_id,
+        finding_ids=finding_row_ids(ctx.sessions, result.run_id, findings),
+        line_cap=settings.fix_line_cap,
+    )
 
 
 def _record_patch(

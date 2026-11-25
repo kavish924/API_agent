@@ -44,6 +44,7 @@ class Grading:
     changes: list[GradedChange] = field(default_factory=list)
     dropped: int = 0
     old_surface: Surface | None = None  # the API the repository is on, for the scanner
+    new_surface: Surface | None = None  # the API it moves to, for the agent's lookup_api
 
     def summary(self) -> dict[str, int]:
         return {
@@ -98,6 +99,7 @@ def grade_range(ctx: AppContext, source: SdkSource, version_range: RangeResult) 
         return grading
 
     grading.old_surface = old_surface
+    grading.new_surface = new_surface
     reconciled = reconcile(grading.records, old_surface, new_surface, diff)
     grading.changes = reconciled.changes
     grading.dropped = len(reconciled.dropped)

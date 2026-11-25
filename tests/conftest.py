@@ -100,6 +100,7 @@ def ctx(
     settings = Settings(
         database_url=migrated_url,
         blob_dir=tmp_path / "blobs",
+        work_dir=tmp_path / "work",
         llm_model="stub-model",
         _env_file=None,
     )

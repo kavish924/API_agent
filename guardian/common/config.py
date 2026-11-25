@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_URL", "GUARDIAN_DATABASE_URL"),
     )
     blob_dir: Path = Path(".guardian/blobs")
+    # Local scratch space: unpacked SDK wheels for the agent's type checker.
+    work_dir: Path = Path(".guardian/work")
 
     # Global pause flag (spec 00 F0.12): checked before any write to GitHub.
     paused: bool = False
@@ -40,6 +42,13 @@ class Settings(BaseSettings):
     fix_mode: Literal["agent", "single-shot"] = "agent"
     # Changed lines allowed per finding in a model-written diff (F5.9).
     fix_line_cap: int = 40
+
+    # Agent fixer budgets (spec 11 F11.15, F11.16).
+    agent_max_steps: int = 12
+    agent_max_proposals: int = 3
+    agent_max_tokens: int = 60_000
+    agent_max_seconds: float = 120.0
+    agent_run_cost_cap: float = 1.0
 
     # Optional token for reading public release data. Without it GitHub allows 60
     # requests an hour, which is enough for local use.

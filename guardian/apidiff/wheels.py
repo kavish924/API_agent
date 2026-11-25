@@ -78,3 +78,31 @@ def fetch_wheel(
     if not expected or hashlib.sha256(data).hexdigest() != expected:
         raise WheelError(f"sha256 mismatch for {chosen['filename']}")
     unpack_wheel(data, destination)
+
+
+def cached_wheel(
+    http: httpx.Client,
+    package: str,
+    version: str,
+    cache_root: Path,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    pypi_url: str = PYPI_URL,
+) -> Path:
+    """An unpacked wheel under `cache_root`, fetched once (the agent's type checker)."""
+    target = cache_root / package / version
+    if (target / ".complete").exists():
+        return target
+    partial = cache_root / package / f".{version}.partial"
+    if partial.exists():
+        import shutil
+
+        shutil.rmtree(partial)
+    fetch_wheel(http, package, version, partial, sleep=sleep, pypi_url=pypi_url)
+    (partial / ".complete").write_text(version, encoding="utf-8")
+    if target.exists():
+        import shutil
+
+        shutil.rmtree(target)
+    partial.rename(target)
+    return target

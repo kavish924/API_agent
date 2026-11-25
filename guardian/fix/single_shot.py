@@ -46,7 +46,7 @@ class SingleShotOutput(BaseModel):
     reason: str = Field(default="", description="Why it cannot be fixed, or what changed.")
 
 
-def _change_data(group: FixGroup) -> list[dict[str, object]]:
+def change_data(group: FixGroup) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     for item in group.items:
         change = item.change
@@ -76,7 +76,7 @@ def build_messages(group: FixGroup) -> list[Message]:
         f"Library: {group.package}, upgrading {group.old} -> {group.new}\n"
         f"File: {group.path}\n\n"
         "<changes>\n"
-        f"{json.dumps(_change_data(group), indent=2)}\n"
+        f"{json.dumps(change_data(group), indent=2)}\n"
         "</changes>\n\n"
         f'<region lines="{group.start}-{group.end}">\n{numbered}\n</region>\n\n'
         "Return the region without line numbers."

@@ -316,9 +316,10 @@ def _tier2(
                     cost=proposal.cost,
                 )
             )
+            status = proposal.give_up_status
             for item in group.items:
                 patch.fixes.append(
-                    FindingFix(item.index, FIX_FAILED, tier=fixer.name, reason=proposal.reason)
+                    FindingFix(item.index, status, tier=fixer.name, reason=proposal.reason)
                 )
             continue
         verdict = check_patch(

@@ -185,23 +185,23 @@ If time is short, protect those two.
 
 ## Phase 4 — Agent fixer (week 4) — core
 
-- [ ] Spec 11 marked `Approved`
-- [ ] Agent loop on the shared LLM client with native tool use [F11.1–F11.3]
-- [ ] Tool `read_file` [F11.4]
-- [ ] Tool `search_repo` [F11.5]
-- [ ] Tool `lookup_api` over the new SDK surface [F11.6]
-- [ ] Tool `get_change` [F11.7]
-- [ ] Tool `run_typecheck` backed by the sandbox service [F11.8, F6.13]
-- [ ] Tool `propose_patch` through the AST guard; rejection returned as a tool result [F11.9]
-- [ ] Tool `cannot_fix` [F11.10]
-- [ ] No shell, network, GitHub or write tools [F11.11]
-- [ ] Path confinement: escapes, absolute paths and outward symlinks refused [F11.12]
-- [ ] Secret-file deny list [F11.13]; tool result size caps [F11.14]
-- [ ] Budgets: steps, proposals, tokens, wall clock; per-run cost cap [F11.15, F11.16]
-- [ ] Every step written to `agent_steps`; a session can be replayed [F11.17]
-- [ ] Agent skipped where a codemod applies [F11.20]
-- [ ] Tests with the scripted stub: happy path, guard rejection and retry, budget exhaustion, `cannot_fix`
-- [ ] Adversarial fixtures: injected instructions in code, comments, docstrings and type-checker output [F8.7]
+- [x] Spec 11 marked `Approved` — 2026-11-25
+- [x] Agent loop on the shared LLM client with native tool use [F11.1–F11.3]
+- [x] Tool `read_file` [F11.4]
+- [x] Tool `search_repo` [F11.5] — regex, capped
+- [x] Tool `lookup_api` over the new SDK surface [F11.6]
+- [x] Tool `get_change` [F11.7]
+- [x] Tool `run_typecheck` backed by the sandbox service [F11.8, F6.13] — interim static mypy check until spec 06
+- [x] Tool `propose_patch` through the AST guard; rejection returned as a tool result [F11.9]
+- [x] Tool `cannot_fix` [F11.10]
+- [x] No shell, network, GitHub or write tools [F11.11]
+- [x] Path confinement: escapes, absolute paths and outward symlinks refused [F11.12]
+- [x] Secret-file deny list [F11.13]; tool result size caps [F11.14]
+- [x] Budgets: steps, proposals, tokens, wall clock; per-run cost cap [F11.15, F11.16]
+- [x] Every step written to `agent_steps`; a session can be replayed [F11.17]
+- [x] Agent skipped where a codemod applies [F11.20]
+- [x] Tests with the scripted stub: happy path, guard rejection and retry, budget exhaustion, `cannot_fix` — `tests/test_agent.py`
+- [ ] Adversarial fixtures: injected instructions in code, comments, docstrings and type-checker output [F8.7] — comment-injection case done (`tests/test_agent.py`); docstring and type-checker-output fixtures and the eval safety set still to build
 - [ ] `make eval-fix` runs codemod, single-shot and agent on the same findings [F8.5]
 - [ ] Agent comparison table: fix rate, cost per fix, steps, guard rejections [F8.6]
 
@@ -209,7 +209,7 @@ If time is short, protect those two.
 - [ ] The agent fixes at least one real finding that single-shot gets wrong, or the eval shows it does not and that result is recorded
 - [ ] Zero harmful patches accepted on the safety set
 - [ ] Fix eval recorded (target: ≥ 60% reach L2 or higher, false-confidence < 10%)
-- [ ] Model and default budget written into spec 11
+- [ ] Model and default budget written into spec 11 — default budget written (2026-11-25); model still open
 - [ ] Spec 11 marked `Verified`
 
 ---
