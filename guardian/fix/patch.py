@@ -159,13 +159,16 @@ def build_patch(
     literal_replacements: Mapping[int, str] | None = None,
     bump_version: bool = True,
     line_cap: int = DEFAULT_LINE_CAP,
+    report_reasons: Mapping[int, str] | None = None,
+    tier2: bool = True,
 ) -> PatchSet:
     """Build one patch set for a run's findings.
 
     `package` is the distribution name (for the bump), `module` the import name (for
     the guard). `fixer` is the Tier 2 fixer for `mode`; without one, findings no
     codemod handles fail with the reason. API-level runs pass `bump_version=False`
-    (spec 10 F10.10).
+    (spec 10 F10.10), `report_reasons` (literal query -> why it is report-only) and
+    `tier2=False`: a model swap is a literal codemod or nothing.
     """
     patch = PatchSet(package=package, old=old, new=new)
     literals = literal_replacements or {}
@@ -185,7 +188,13 @@ def build_patch(
             patch.fixes.append(FindingFix(index, REPORT_ONLY, reason=change.change_type.value))
             continue
         if change is None and replacement is None:
-            patch.fixes.append(FindingFix(index, REPORT_ONLY, reason="no replacement"))
+            reasons = report_reasons or {}
+            reason = (
+                reasons.get(finding.query, "no replacement")
+                if finding.query is not None
+                else "no replacement"
+            )
+            patch.fixes.append(FindingFix(index, REPORT_ONLY, reason=reason))
             continue
         fixable.setdefault(finding.file, []).append(FixItem(index, finding, change, replacement))
 
@@ -204,7 +213,12 @@ def build_patch(
             continue
         current = _codemods(patch, path, original, items, changes, literals)
         remaining = [item for item in items if not _decided(patch, item.index)]
-        if remaining:
+        if remaining and not tier2:
+            for item in remaining:
+                patch.fixes.append(
+                    FindingFix(item.index, FIX_FAILED, reason="no codemod fits this code")
+                )
+        elif remaining:
             current = _tier2(
                 patch,
                 path,

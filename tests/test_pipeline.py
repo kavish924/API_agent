@@ -19,7 +19,7 @@ from guardian.common.jobs import InProcessQueue, Job, JobType
 from guardian.github_app.delivery import Delivery, deliver
 from guardian.pipeline.types import NOT_IMPLEMENTED, POLL_OK, RunRequest
 from guardian.watch.depfiles import NOT_USED
-from tests.fakes import OPENAI, FakeGitHub
+from tests.fakes import OPENAI, FakeGitHub, FakePages, FakePyPI, combined_client
 
 runner = CliRunner()
 
@@ -29,10 +29,15 @@ runner = CliRunner()
 
 def test_entry_points_are_plain_functions(ctx: AppContext) -> None:
     assert pipeline.poll(ctx).outcome == POLL_OK
-    # An installed repository (not a local path) needs the GitHub App, which is spec 07.
-    request = RunRequest(repo="octo/app", target="openai@1.45.0", package="openai")
-    assert pipeline.run(request, ctx).outcome == NOT_IMPLEMENTED
-    assert pipeline.handle_event({"action": "created"}, ctx).outcome == NOT_IMPLEMENTED
+    # An installed repository needs the GitHub App; none is configured in this context.
+    request = RunRequest(
+        repo="octo/app", target="openai@1.45.0", package="openai", installation_id=1
+    )
+    result = pipeline.run(request, ctx)
+    assert result.outcome == NOT_IMPLEMENTED and "GitHub App" in (result.reason or "")
+    # An event without an installation changes nothing.
+    event = pipeline.handle_event({"event": "installation", "payload": {"action": "created"}}, ctx)
+    assert (event.outcome, event.activated, event.runs_enqueued) == ("applied", [], 0)
 
 
 def test_queue_invokes_all_three_job_types(
@@ -111,7 +116,11 @@ def cli_env(
     # The CLI builds its own context; give it the fake GitHub so no test hits the network.
     monkeypatch.setattr(
         "guardian.cli.build_context",
-        lambda settings: build_context(settings, http=github.client(), sleep=lambda _: None),
+        lambda settings: build_context(
+            settings,
+            http=combined_client(github, FakePyPI(), FakePages()),
+            sleep=lambda _: None,
+        ),
     )
     return database_url
 
@@ -146,6 +155,12 @@ def test_run_help_lists_its_options() -> None:
     assert result.exit_code == 0
     for option in ("--repo", "--package", "--from", "--to", "--fix-mode", "--write-patch"):
         assert option in _plain(result.output)
+
+
+def test_serve_needs_the_app_settings(cli_env: str) -> None:
+    result = runner.invoke(app, ["serve"])
+    assert result.exit_code == 2
+    assert _last_json(result.output)["outcome"] == "not-configured"
 
 
 def test_plain_strips_colour_codes() -> None:
@@ -212,8 +227,19 @@ def test_ingest_requires_an_existing_file(cli_env: str, tmp_path: Path) -> None:
     )
     assert missing.exit_code != 0
 
-    page = tmp_path / "page.html"
-    page.write_text("<html></html>", encoding="utf-8")
+    assert runner.invoke(app, ["migrate"]).exit_code == 0
+    page = tmp_path / "page.md"
+    page.write_text("# Deprecations\n", encoding="utf-8")
     ok = runner.invoke(app, ["ingest", "--source", "openai-deprecations", "--file", str(page)])
     assert ok.exit_code == 0, ok.output
-    assert _last_json(ok.output)["source"] == "openai-deprecations"
+    stored = _last_json(ok.output)
+    assert (stored["source"], stored["outcome"], stored["revision"]) == (
+        "openai-deprecations",
+        "stored",
+        1,
+    )
+    again = runner.invoke(app, ["ingest", "--source", "openai-deprecations", "--file", str(page)])
+    assert _last_json(again.output)["outcome"] == "unchanged"
+
+    unknown = runner.invoke(app, ["ingest", "--source", "nope", "--file", str(page)])
+    assert unknown.exit_code == 2 and _last_json(unknown.output)["outcome"] == "unknown-source"

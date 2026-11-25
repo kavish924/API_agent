@@ -1,5 +1,5 @@
 # Spec 10 — API-level changes
-Status: Draft · Phase: 5 · PRD v3 ref: FR3 · Depends on: 01-change-discovery, 02-extraction, 04-repo-scanning, 05-fix-generation, 07-github-integration
+Status: Implemented · Phase: 5 · PRD v3 ref: FR3 · Depends on: 01-change-discovery, 02-extraction, 04-repo-scanning, 05-fix-generation, 07-github-integration
 
 ## Goal
 Cover the changes that break code which changes nothing: a provider retires a model or
@@ -34,25 +34,25 @@ as SDK changes.
 | F10.14 | Manual path: `guardian ingest --source <id> --file <path>` stores a saved copy of the page as a snapshot, for when the page cannot be fetched (kept as a fallback; the spike fetched it without trouble) |
 
 ## Acceptance criteria
-- [ ] GIVEN two snapshots where the second adds one entry, THEN exactly one record is extracted from the second.
-- [ ] GIVEN an unchanged page, THEN nothing is stored and no runs start.
-- [ ] GIVEN a record retiring model `X` with replacement `Y`, and a repo calling `client.chat.completions.create(model="X", …)`, THEN one finding, and the codemod changes only the literal.
-- [ ] GIVEN `MODEL = "X"` at module level and `create(model=MODEL)`, THEN the finding points at the constant and the fix edits it.
-- [ ] GIVEN `create(model=os.environ["MODEL"])`, THEN no finding in Python, and a match of `X` in `.env.example` is listed as a possible usage.
-- [ ] GIVEN the string `"X"` in an unrelated call or a comment, THEN no finding.
-- [ ] GIVEN a record with no replacement, THEN an issue is opened with the call sites and the date, and no PR.
-- [ ] GIVEN any PR from this spec, THEN its title contains the shutdown date and the behaviour-change label, and its commit changes no dependency file.
-- [ ] GIVEN `api_changes: off`, THEN no run output for these changes.
-- [ ] GIVEN `guardian ingest --file` with a saved page, THEN the same records result as from a fetch.
-- [ ] **Real snapshot fixture** (the page as fetched on 2026-11-13, stored in the repo): the parser finds 34 upcoming rows and 52 model IDs with no LLM call, and:
+- [x] GIVEN two snapshots where the second adds one entry, THEN exactly one record is extracted from the second.
+- [x] GIVEN an unchanged page, THEN nothing is stored and no runs start.
+- [x] GIVEN a record retiring model `X` with replacement `Y`, and a repo calling `client.chat.completions.create(model="X", …)`, THEN one finding, and the codemod changes only the literal.
+- [x] GIVEN `MODEL = "X"` at module level and `create(model=MODEL)`, THEN the finding points at the constant and the fix edits it.
+- [x] GIVEN `create(model=os.environ["MODEL"])`, THEN no finding in Python, and a match of `X` in `.env.example` is listed as a possible usage.
+- [x] GIVEN the string `"X"` in an unrelated call or a comment, THEN no finding.
+- [x] GIVEN a record with no replacement, THEN an issue is opened with the call sites and the date, and no PR.
+- [x] GIVEN any PR from this spec, THEN its title contains the shutdown date and the behaviour-change label, and its commit changes no dependency file.
+- [x] GIVEN `api_changes: off`, THEN no run output for these changes.
+- [x] GIVEN `guardian ingest --file` with a saved page, THEN the same records result as from a fetch.
+- [x] **Real snapshot fixture** (the page as fetched on 2026-11-13, stored in the repo): the parser finds 34 upcoming rows and 52 model IDs with no LLM call, and:
     - `gpt-5` → `gpt-6.1-sol`, shutdown 2026-12-11: `single`, same family, **fixable**.
     - `tts-1` → `gpt-realtime-2.1-mini`: different family, **report-only**.
     - `gpt-image-1.5` → "`gpt-image-2.6-sunburst` or `gpt-image-2.6-flare`": `choice`, **report-only**.
     - `o3-pro` → `gpt-6.1-sol` with `reasoning.mode: pro`: `with-settings`, **report-only**.
     - `gpt-5.5-cyber-preview`: no replacement, **report-only**.
-- [ ] GIVEN `client.audio.speech.create(model="tts-1")` and a record retiring `tts-1` in favour of a realtime model, THEN the finding is report-only and the issue says why.
-- [ ] GIVEN `"gpt-5"` passed to an images method, THEN no chat-family finding is made; it is listed as a possible usage.
-- [ ] GIVEN two fetches with the same `ETag`, THEN the second is a 304 and nothing is stored.
+- [x] GIVEN `client.audio.speech.create(model="tts-1")` and a record retiring `tts-1` in favour of a realtime model, THEN the finding is report-only and the issue says why.
+- [x] GIVEN `"gpt-5"` passed to an images method, THEN no chat-family finding is made; it is listed as a possible usage.
+- [x] GIVEN two fetches with the same `ETag`, THEN the second is a 304 and nothing is stored.
 
 ## Technical notes
 - This is deliberately simple downstream: the scanner already resolves SDK calls, so
@@ -78,6 +78,19 @@ as SDK changes.
 - Values that arrive from environment or config at runtime cannot be seen by a static
   scan. F10.9 exists to make that limit visible to the user instead of silent.
 
+### As built (2026-11-25)
+- Code: `guardian/apilevel/` — `page.py` (parser, replacement shapes, records, snapshot
+  diff), `families.py` + `families.toml` (reviewed family table), `source.py` (fetch,
+  snapshots, gate, fan-out, ingest), `run.py` (literal scan, possible usages, patch,
+  storage). `pipeline.poll` polls API pages; `pipeline.run` handles
+  `<source>@r<revision>` and `<source>@latest` targets; `guardian ingest` stores a page.
+- Real snapshot (2026-11-25): 34 upcoming rows, 52 model IDs (30 fixable), 6 endpoint
+  rows. The worked cases hold; `gpt-5.3-codex` -> `gpt-6-sol` is report-only because
+  Codex models are Responses-only in the family table.
+- Possible usages report file and line only, never the line, so a value in a config
+  file is not copied into a PR. Real `.env` files are skipped; `.env.example` is read.
+- Delivery (PR or issue, label, date, `api_changes`) is spec 07's `Publisher`.
+
 ## Test plan
 - Unit: table parser and snapshot diff on the stored real snapshot (F10.2, F10.3);
   family mapping and the fixable rule (F10.15, F10.16); LLM path for prose cells with
@@ -102,8 +115,25 @@ as SDK changes.
 - Demo timing: `gpt-5`, `gpt-5-mini`, `gpt-5-nano` and `o3` shut down on 2026-12-11.
   Phase 5 starts after that date, so the live demo will need a later retirement or a
   replay of the 2026-11-13 snapshot.
-- Default for `api_changes`: `pr` makes the better demo; `issue` is the more cautious
-  default for a behaviour change. Proposed: `pr`, as a draft with the label.
+- 2026-11-25: default for `api_changes` is `pr`, as a draft labelled a behaviour change.
+- 2026-11-25: the 2026-11-13 snapshot was never stored. The real-snapshot fixture is
+  the page fetched on 2026-11-25 (`tests/fixtures/pages/openai-deprecations-2026-11-25.md`);
+  the acceptance numbers are rewritten from what it contains. The five worked cases
+  are present on it unchanged.
+- 2026-11-25: every replacement cell on the page has one of four regular shapes (one
+  model ID; "`A` or `B`"; one model ID with settings in backticks; prose with no model
+  ID), so model rows are classified by plain code and need no LLM. A cell that fits no
+  shape is `none` (report-only). The LLM path of F10.5 is kept for later prose sources.
+- 2026-11-25: the "Feature and endpoint deprecations" table is parsed and stored as
+  `endpoint-sunset` records, report-only. Matching endpoints to SDK methods is not in
+  v3: those records are listed, not scanned.
+- 2026-11-25: a model ID belongs to a **set** of API families: text models such as
+  `gpt-5` serve both `chat` and `responses`. A call matches when its method's family is
+  in that set; a fix needs the replacement's set to equal the retired model's.
+- 2026-11-25: a run checks the repo against every upcoming record whose shutdown date
+  is in the future. The gate (new or changed rows) decides when runs start; this also
+  makes the install catch-up run (spec 07 F7.5) the same code path.
+- 2026-11-25: spec approved.
 - How long before the shutdown date should the app act: at once, or only inside a
   window? Proposed: at once.
 - 2026-11-13 (v3): new spec. v2 listed server-side changes as out of scope.

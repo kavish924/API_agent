@@ -19,7 +19,10 @@ import httpx
 from sqlalchemy import select
 
 from guardian.agent import AgentFixer, Budget, StaticTypeChecker, Workspace
+from guardian.apidiff.service import ApiDiffService
 from guardian.apidiff.wheels import cached_wheel
+from guardian.apilevel.run import latest_upcoming, record_api_run, run_api
+from guardian.apilevel.source import API_SOURCES, ApiSource, api_source, poll_api_source
 from guardian.common.context import AppContext
 from guardian.common.db import session_scope
 from guardian.common.jobs import InProcessQueue, Job, JobType
@@ -37,6 +40,13 @@ from guardian.fix import (
     Tier2Fixer,
     build_patch,
 )
+from guardian.github_app.checkout import CheckoutError, RemoteRepo, fetch_checkout
+from guardian.github_app.client import GitHubError
+from guardian.github_app.config import read_config
+from guardian.github_app.events import apply_event
+from guardian.github_app.publish import SKIPPED, Publisher
+from guardian.github_app.render import Report
+from guardian.github_app.reports import api_report, sdk_report
 from guardian.pipeline.grade import Grading, grade_range
 from guardian.pipeline.types import (
     GATE_APPLIED,
@@ -61,7 +71,8 @@ from guardian.scan.store import (
     record_fixes,
     record_scan,
 )
-from guardian.watch.depfiles import LocalRepoFiles
+from guardian.verify.static import Verification, verify_static
+from guardian.watch.depfiles import NOT_USED, LocalRepoFiles, find_pin
 from guardian.watch.documents import StoredDocument
 from guardian.watch.github import SourceError
 from guardian.watch.poller import mark_assessed, poll_sources
@@ -85,6 +96,7 @@ __all__ = [
 log = get_logger(__name__)
 
 PACKAGE_NOT_WATCHED = "package-not-watched"
+REPO_INACTIVE = "repo-inactive"  # the App was uninstalled there (F7.20)
 SOURCE_ERROR = "source-error"
 
 
@@ -125,6 +137,7 @@ def poll(
     assessor: Assessor | None = None,
     gate_label: str = GATE_APPLIED,
     sources: Iterable[SdkSource] = SDK_SOURCES,
+    api_sources: Iterable[ApiSource] = API_SOURCES,
 ) -> PollResult:
     """Check every change source, apply the release gate, fan out runs (spec 01).
 
@@ -165,8 +178,20 @@ def poll(
             result.assessed += len(decided)
             result.awaiting_gate += len(source_poll.pending) - len(decided)
 
-        if result.errors:
-            result.outcome = POLL_FAILED if len(result.errors) == len(polls) else POLL_PARTIAL
+        sdk_errors = len(result.errors)
+        if sdk_errors:
+            result.outcome = POLL_FAILED if sdk_errors == len(polls) else POLL_PARTIAL
+        for api in api_sources:  # spec 10: provider pages, gated by their own records
+            page = poll_api_source(ctx, api)
+            result.api_pages_checked += 1
+            if page.error is not None:
+                result.errors.append(f"{api.id}: {page.error}")
+                result.outcome = POLL_PARTIAL
+                continue
+            if page.not_modified or (page.snapshot is not None and not page.snapshot.created):
+                result.api_pages_unchanged += 1
+            result.api_records_new += len(page.new_records)
+            result.runs_enqueued += page.runs_enqueued
         if gate_errors:
             result.errors += gate_errors
             result.outcome = POLL_PARTIAL
@@ -190,10 +215,61 @@ def run(request: RunRequest, ctx: AppContext) -> RunResult:
 
 
 def _run(request: RunRequest, ctx: AppContext) -> RunResult:
+    remote: RemoteRepo | None = None
+    if request.installation_id is not None and not Path(request.repo).is_dir():
+        fetched = _fetch_remote(request, ctx)
+        if isinstance(fetched, RunResult):
+            return fetched
+        remote = fetched
+        request = request.model_copy(update={"repo": str(remote.path), "head_sha": remote.head_sha})
+    api = api_source(request.target.split("@", 1)[0])
+    if api is not None and request.package is None:
+        return _run_api(request, ctx, api, remote)
+    return _run_sdk(request, ctx, remote)
+
+
+def _fetch_remote(request: RunRequest, ctx: AppContext) -> RemoteRepo | RunResult:
+    """Download an installed repo at its default-branch commit (spec 07, spec 04 F4.1)."""
+    assert request.installation_id is not None
+    if ctx.github is None:
+        return RunResult(
+            outcome=NOT_IMPLEMENTED,
+            reason="the GitHub App is not configured (GUARDIAN_GITHUB_APP_ID and key)",
+        )
+    with session_scope(ctx.sessions) as session:
+        row = session.scalars(
+            select(Repo).where(
+                Repo.installation_id == request.installation_id,
+                Repo.full_name == request.repo,
+            )
+        ).first()
+        if row is not None and not row.active:
+            return RunResult(outcome=REPO_INACTIVE, reason="the App is not installed there")
+    try:
+        return fetch_checkout(
+            ctx.github, request.installation_id, request.repo, ctx.settings.work_dir
+        )
+    except (GitHubError, CheckoutError, httpx.HTTPError) as exc:
+        return RunResult(outcome=SOURCE_ERROR, reason=f"could not read {request.repo}: {exc}")
+
+
+def _identity(
+    checkout: Path, remote: RemoteRepo | None, request: RunRequest
+) -> tuple[str, int, str]:
+    """(repo name, installation id, commit) a run is stored under."""
+    if remote is not None:
+        return remote.full_name, remote.installation_id, remote.head_sha
+    repo, head = local_identity(checkout)
+    return repo, LOCAL_INSTALLATION, request.head_sha or head
+
+
+def _run_sdk(request: RunRequest, ctx: AppContext, remote: RemoteRepo | None) -> RunResult:
     package = request.package or request.target.split("@", 1)[0]
     source = source_for_package(package)
     if source is None:
         return RunResult(outcome=PACKAGE_NOT_WATCHED, package=package)
+    if remote is not None and not read_config(remote.path).wants(source.package):
+        return RunResult(outcome=SKIPPED, package=package, reason="not in packages")
 
     checkout = Path(request.repo)
     files = LocalRepoFiles(checkout) if checkout.is_dir() else None
@@ -254,14 +330,14 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
     result.scan_seconds = round(scan.seconds, 2)
 
     outcome = NO_FINDINGS if not scan.findings else NOT_IMPLEMENTED
-    repo, head = local_identity(checkout)
+    repo, installation, head = _identity(checkout, remote, request)
     assert version_range.old is not None and version_range.new is not None
     result.run_id = record_scan(
         ctx.sessions,
         repo=repo,
-        installation_id=LOCAL_INSTALLATION,
+        installation_id=installation,
         target=f"{source.package}@{version_range.new}",
-        head=request.head_sha or head,
+        head=head,
         package=source.package,
         from_version=version_range.old,
         to_version=version_range.new,
@@ -296,8 +372,156 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
         line_cap=ctx.settings.fix_line_cap,
     )
     _record_patch(ctx, result, scan.findings, patch, mode)
-    result.reason = "patch built; verification is not built yet (spec 06)"
+    checker = StaticTypeChecker(
+        checkout,
+        lambda: _wheel(ctx, source.package, version_range.new or ""),
+        base_sdk_dir=lambda: _wheel(ctx, source.package, version_range.old or ""),
+    )
+    verification = _verify(result, scan.findings, patch, checker)
+    if remote is not None:
+        report = sdk_report(
+            source,
+            version_range.old,
+            version_range.new,
+            scan.findings,
+            grading.changes,
+            patch,
+            verification,
+        )
+        _publish(ctx, remote, report, result)
     return result
+
+
+def _publish(ctx: AppContext, remote: RemoteRepo, report: Report, result: RunResult) -> None:
+    assert ctx.github is not None
+    published = Publisher(ctx, ctx.github, remote).publish(report, read_config(remote.path))
+    result.delivery = published.action
+    result.delivery_number = published.number
+    result.delivery_url = published.url
+    if published.reason:
+        result.reason = published.reason
+
+
+def _wheel(ctx: AppContext, package: str, version: str) -> Path:
+    return cached_wheel(
+        ctx.http, package, version, ctx.settings.work_dir / "wheels", sleep=ctx.sleep
+    )
+
+
+def _verify(
+    result: RunResult,
+    findings: Sequence[Finding],
+    patch: PatchSet,
+    checker: StaticTypeChecker,
+) -> Verification | None:
+    """Interim static L1/L2 on the patch (decision 2026-11-25), recorded on the result."""
+    if not patch.count(FIXED):
+        result.reason = "nothing was fixed: the findings go to an issue (spec 07)"
+        return None
+    left: dict[str, list[int]] = {}
+    for fix in patch.fixes:
+        if fix.status != FIXED:
+            finding = findings[fix.index]
+            left.setdefault(finding.file, []).append(finding.line)
+    verification = verify_static(patch.files, checker, report_only_lines=left)
+    result.verification_level = verification.level
+    result.verification = {
+        "compile_errors": verification.compile_errors,
+        "lint_errors": verification.lint_errors,
+        "type_errors": verification.type_errors,
+        "remaining": verification.remaining,
+        "notes": verification.notes,
+    }
+    result.reason = (
+        f"patch built and verified to {verification.level} (static; tests not run)"
+        if verification.verified
+        else "the patch could not be verified: it goes to an issue (spec 07)"
+    )
+    return verification
+
+
+def _run_api(
+    request: RunRequest, ctx: AppContext, api: ApiSource, remote: RemoteRepo | None
+) -> RunResult:
+    """An API-level run: model retirements on a provider page (spec 10)."""
+    result = RunResult(outcome=NOT_IMPLEMENTED, api_source=api.id, behaviour_change=True)
+    if remote is not None and read_config(remote.path).api_changes == "off":
+        result.outcome, result.reason = SKIPPED, "api_changes is off"
+        return result
+    checkout = Path(request.repo)
+    if not checkout.is_dir():
+        result.reason = "reading an installed repository needs the GitHub App (spec 07)"
+        return result
+    records = latest_upcoming(ctx, api)
+    result.api_records = len(records)
+    if not records:
+        result.outcome = NO_FINDINGS
+        result.reason = f"no upcoming records: {api.id} has no snapshot yet, or nothing is due"
+        return result
+    files = LocalRepoFiles(checkout)
+    pin = find_pin(files, api.module)
+    if pin.status == NOT_USED:
+        result.outcome = NOT_USED
+        result.reason = f"the repository does not use {api.module}"
+        return result
+    sdk = source_for_package(api.module)
+    if sdk is None:
+        result.reason = f"{api.module} is not a watched SDK"
+        return result
+    try:
+        version = pin.version or _latest_version(ctx, api.module)
+        surface = ApiDiffService.from_context(ctx).surface(sdk, version)
+    except Exception as exc:  # the SDK surface is needed to resolve calls
+        result.outcome = SOURCE_ERROR
+        result.reason = f"could not load the {api.module} API: {exc}"
+        return result
+    result.package, result.from_version = api.module, version
+
+    outcome = run_api(checkout, api, records, surface)
+    assert outcome.scan is not None
+    result.findings = len(outcome.findings)
+    result.finding_sites = len({(f.file, f.line, f.column) for f in outcome.findings})
+    result.files_scanned, result.files_parsed = outcome.scan.files_total, outcome.scan.files_parsed
+    result.possible_usages = [str(usage) for usage in outcome.possible]
+    shutdown = outcome.earliest_shutdown
+    result.shutdown_date = shutdown.isoformat() if shutdown else None
+    repo, installation, head = _identity(checkout, remote, request)
+    status = NO_FINDINGS if not outcome.findings else NOT_IMPLEMENTED
+    result.run_id = record_api_run(
+        ctx.sessions,
+        repo=repo,
+        installation_id=installation,
+        target=request.target,
+        head=head,
+        result=outcome,
+        outcome=status,
+    )
+    result.outcome = status
+    if not outcome.findings:
+        result.reason = "no Python call passes a retiring model to its own API"
+        return result
+    patch = outcome.patch
+    assert patch is not None
+    result.patch_status = patch.status
+    result.fixed = patch.count(FIXED)
+    result.report_only = patch.count(REPORT_ONLY)
+    result.fix_failed = patch.count(FIX_FAILED)
+    result.patch_files = sorted(patch.files)
+    if patch.files:
+        key = f"patches/run-{result.run_id}.diff"
+        result.patch_ref = ctx.blobs.put(key, patch.diff().encode("utf-8"))
+    # One environment: no bump, so base and fixed share the SDK (F10.11).
+    checker = StaticTypeChecker(checkout, lambda: _wheel(ctx, sdk.package, version))
+    verification = _verify(result, outcome.findings, patch, checker)
+    if remote is not None:
+        _publish(ctx, remote, api_report(api, outcome, patch, verification), result)
+    return result
+
+
+def _latest_version(ctx: AppContext, package: str) -> str:
+    response = ctx.http.get(f"https://pypi.org/pypi/{package}/json")
+    response.raise_for_status()
+    return str(response.json()["info"]["version"])
 
 
 def _agent(
@@ -313,9 +537,7 @@ def _agent(
     assert result.run_id is not None
 
     def sdk_dir() -> Path:
-        return cached_wheel(
-            ctx.http, source.package, new_version, settings.work_dir / "wheels", sleep=ctx.sleep
-        )
+        return _wheel(ctx, source.package, new_version)
 
     return AgentFixer(
         ctx.llm,
@@ -365,10 +587,21 @@ def _record_patch(
 
 
 def handle_event(payload: dict[str, Any], ctx: AppContext) -> EventResult:
-    """Apply a GitHub installation event to the `repos` table (spec 07)."""
+    """Apply a GitHub installation event to the `repos` table (spec 07 F7.4, F7.5, F7.20).
+
+    `payload` is the event job's payload: `{"event": ..., "payload": <GitHub body>}`.
+    """
     with run_context():
-        log.info("event received", extra={"fields": {"action": payload.get("action")}})
-        return EventResult(outcome=NOT_IMPLEMENTED)
+        event = str(payload.get("event", ""))
+        body = payload.get("payload") or {}
+        log.info("event received", extra={"fields": {"event": event, "action": body.get("action")}})
+        change = apply_event(ctx, event, body)
+        return EventResult(
+            outcome="applied",
+            activated=change.activated,
+            deactivated=change.deactivated,
+            runs_enqueued=change.runs_enqueued,
+        )
 
 
 def register_handlers(queue: InProcessQueue, ctx: AppContext) -> None:

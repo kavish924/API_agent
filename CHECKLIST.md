@@ -217,38 +217,38 @@ If time is short, protect those two.
 ## Phase 5 — GitHub App and API-level changes (week 5)
 
 ### GitHub App (spec 07)
-- [ ] Spec 07 marked `Approved`
-- [ ] App registered; manifest committed; permissions exactly Contents RW, Pull requests RW, Issues RW, Metadata R [F7.1, F7.2]
-- [ ] Webhook signature check; 401 on failure [F7.3]
-- [ ] Installation events register and deactivate repos [F7.4, F7.20]
-- [ ] Catch-up run on install [F7.5]
-- [ ] Branch `guardian/upgrade-<package>`; one commit with bump and fix; draft PR against the default branch [F7.6]
-- [ ] Nothing is ever pushed to the default branch [F7.7]
-- [ ] PR description rendered [F7.8]; partial PRs marked [F7.9]
-- [ ] Same PR updated by a later run [F7.10]
-- [ ] Closed-PR memory by declined change IDs [F7.11]
-- [ ] Issue fallback, edited in place [F7.12]
-- [ ] Issue-only mode [F7.13]
-- [ ] Link to an open Dependabot or Renovate PR for the same package [F7.14]
-- [ ] `.github/guardian.yml` read from the default branch [F7.16]
-- [ ] Pause flag honoured [F7.17]; duplicate delivery produces one PR [F7.19]
+- [x] Spec 07 marked `Approved` — 2026-11-25
+- [ ] App registered (manifest committed: `deploy/github-app-manifest.json`; registering needs your GitHub account, see `docs/github-app-setup.md`); permissions exactly Contents RW, Pull requests RW, Issues RW, Metadata R [F7.1, F7.2]
+- [x] Webhook signature check; 401 on failure [F7.3]
+- [x] Installation events register and deactivate repos [F7.4, F7.20]
+- [x] Catch-up run on install [F7.5]
+- [x] Branch `guardian/upgrade-<package>`; one commit with bump and fix; draft PR against the default branch [F7.6]
+- [x] Nothing is ever pushed to the default branch [F7.7]
+- [x] PR description rendered [F7.8]; partial PRs marked [F7.9]
+- [x] Same PR updated by a later run [F7.10]
+- [x] Closed-PR memory by declined change IDs [F7.11]
+- [x] Issue fallback, edited in place [F7.12]
+- [x] Issue-only mode [F7.13]
+- [x] Link to an open Dependabot or Renovate PR for the same package [F7.14]
+- [x] `.github/guardian.yml` read from the default branch [F7.16]
+- [x] Pause flag honoured [F7.17]; duplicate delivery produces one PR [F7.19]
 - [ ] Live test on a real test repo behind a webhook tunnel
 
 ### API-level changes (spec 10)
-- [ ] Spec 10 marked `Approved`
-- [ ] `api-page` source: fetch the `.md` version with conditional requests; snapshot revisions [F10.1, F10.2]
-- [ ] Table parser in plain code; only new or changed rows go further [F10.3]
-- [ ] Record schema with `api_family`, `replacement_kind`, shutdown date; LLM only for prose cells [F10.4, F10.5]
-- [ ] API-family prefix table as reviewed config [F10.15]
-- [ ] Fixable only for a single same-family replacement; everything else report-only [F10.16]
-- [ ] Literal-argument matching with the method's API family, incl. module-level constants [F4.12, F10.8]
-- [ ] Real snapshot fixture (2026-11-13): 34 rows, 52 IDs; the five worked cases in spec 10
+- [x] Spec 10 marked `Approved` — 2026-11-25
+- [x] `api-page` source: fetch the `.md` version with conditional requests; snapshot revisions [F10.1, F10.2]
+- [x] Table parser in plain code; only new or changed rows go further [F10.3]
+- [x] Record schema with `api_family`, `replacement_kind`, shutdown date; LLM only for prose cells [F10.4, F10.5] — model rows need no LLM (all cells have regular shapes); the prose path is kept for later sources
+- [x] API-family prefix table as reviewed config [F10.15]
+- [x] Fixable only for a single same-family replacement; everything else report-only [F10.16]
+- [x] Literal-argument matching with the method's API family, incl. module-level constants [F4.12, F10.8]
+- [x] Real snapshot fixture (2026-11-13): 34 rows, 52 IDs; the five worked cases in spec 10 — replaced by the 2026-11-25 snapshot (decision in spec 10): 34 rows, 52 IDs
 - [ ] Demo: `gpt-5` retires 2026-12-11, before this phase; use a later retirement or replay the stored snapshot
-- [ ] Possible usages in non-Python files listed, never edited [F10.9]
-- [ ] Literal-replacement fix; no version bump [F10.10]
-- [ ] Behaviour-change label and shutdown date on every such PR [F10.12, F10.13]
-- [ ] `api_changes` config: `pr`, `issue`, `off` [F10.13]
-- [ ] Manual path `guardian ingest --file` [F10.14]
+- [x] Possible usages in non-Python files listed, never edited [F10.9]
+- [x] Literal-replacement fix; no version bump [F10.10]
+- [x] Behaviour-change label and shutdown date on every such PR [F10.12, F10.13]
+- [x] `api_changes` config: `pr`, `issue`, `off` [F10.13]
+- [x] Manual path `guardian ingest --file` [F10.14]
 
 **Exit**
 - [ ] Installing the App on a test repo starts a catch-up run

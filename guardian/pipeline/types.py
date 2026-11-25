@@ -55,7 +55,8 @@ class RunResult(BaseModel):
     changes_fixable: int = 0
     changes_from_diff: int = 0  # breaks no release note mentions
     change_types: dict[str, int] = {}
-    verification_level: str | None = None
+    verification_level: str | None = None  # L0 | L1 | L2 (interim static; L3 with spec 06)
+    verification: dict[str, list[str]] = {}  # errors, remaining work and notes, by kind
     # Scanning (spec 04).
     run_id: int | None = None
     findings: int = 0
@@ -76,6 +77,17 @@ class RunResult(BaseModel):
     bump_problems: list[str] = []
     patch_ref: str | None = None  # the unified diff, in the blob store
     fix_cost: float = 0.0
+    # API-level runs (spec 10).
+    api_source: str | None = None
+    api_records: int = 0  # upcoming records the repo was checked against
+    possible_usages: list[str] = []  # other-family calls and config files, never edited
+    shutdown_date: str | None = None  # the earliest shutdown among the findings
+    behaviour_change: bool = False  # a model swap: output, cost and limits may differ
+    # Delivery to GitHub (spec 07): pr-opened, pr-updated, issue-opened, issue-updated,
+    # declined, skipped-by-config or paused. None for local CLI runs.
+    delivery: str | None = None
+    delivery_number: int | None = None
+    delivery_url: str | None = None
 
 
 class PollResult(BaseModel):
@@ -91,7 +103,13 @@ class PollResult(BaseModel):
     awaiting_gate: int = 0  # notes still waiting (no gate yet, or it failed)
     runs_enqueued: int = 0
     errors: list[str] = []
+    api_pages_checked: int = 0
+    api_pages_unchanged: int = 0
+    api_records_new: int = 0
 
 
 class EventResult(BaseModel):
     outcome: str
+    activated: list[str] = []
+    deactivated: list[str] = []
+    runs_enqueued: int = 0

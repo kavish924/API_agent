@@ -45,8 +45,8 @@ spec drafted → reviewed → implemented → verified against acceptance criter
 | [`05-fix-generation.md`](./05-fix-generation.md) | Bump editor, codemods, single-shot fixer, AST guard | FR5 | 3 | Implemented |
 | [`06-verification.md`](./06-verification.md) | Two-phase sandbox verification, levels L1 to L3 | FR6 | 3 | Draft |
 | [`11-agent-fixer.md`](./11-agent-fixer.md) | Agent fixer: tools, budgets, step logging | FR5 | 4 | Implemented |
-| [`07-github-integration.md`](./07-github-integration.md) | GitHub App: installs, upgrade PR, issue fallback | FR7 | 5 | Draft |
-| [`10-api-level-changes.md`](./10-api-level-changes.md) | API-level changes: deprecation notices | FR3 | 5 | Draft |
+| [`07-github-integration.md`](./07-github-integration.md) | GitHub App: installs, upgrade PR, issue fallback | FR7 | 5 | Implemented |
+| [`10-api-level-changes.md`](./10-api-level-changes.md) | API-level changes: deprecation notices | FR3 | 5 | Implemented |
 | [`09-gcp-deployment.md`](./09-gcp-deployment.md) | Deployment on Google Cloud | §7, §8 | 6 | Draft |
 | [`08-evaluation.md`](./08-evaluation.md) | Evaluation harness and published results | §9, §11 | 1–7 | Draft |
 

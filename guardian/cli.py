@@ -5,6 +5,8 @@ The whole pipeline runs from here with no GitHub App and no cloud resources.
 
 from __future__ import annotations
 
+import json
+import threading
 from pathlib import Path
 from typing import Annotated
 
@@ -12,13 +14,17 @@ import typer
 
 from guardian import pipeline
 from guardian.apidiff.gate import make_diff_assessor
+from guardian.apilevel.source import API_SOURCES, api_source
+from guardian.apilevel.source import ingest as ingest_page
 from guardian.common import db
 from guardian.common.config import get_settings
 from guardian.common.context import AppContext, build_context
+from guardian.common.jobs import InProcessQueue
 from guardian.common.log import configure_logging
 from guardian.extract.extractor import llm_available
 from guardian.extract.gate import make_release_assessor
-from guardian.pipeline.types import GATE_API_DIFF_ONLY, GATE_APPLIED, NOT_IMPLEMENTED, RunRequest
+from guardian.github_app.webhook import create_app
+from guardian.pipeline.types import GATE_API_DIFF_ONLY, GATE_APPLIED, RunRequest
 
 app = typer.Typer(
     help="API Change Guardian: applies provider changes to the code that depends on them.",
@@ -91,9 +97,71 @@ def ingest(
         typer.Option("--file", exists=True, dir_okay=False, help="Saved copy of the page."),
     ],
 ) -> None:
-    """Store a saved copy of a provider page as a snapshot (spec 10)."""
-    _context()
-    typer.echo(f'{{"outcome":"{NOT_IMPLEMENTED}","source":"{source}","file":"{file.name}"}}')
+    """Store a saved copy of a provider page as a snapshot (spec 10 F10.14)."""
+    ctx = _context()
+    page = api_source(source)
+    if page is None:
+        known = ", ".join(s.id for s in API_SOURCES)
+        typer.echo(json.dumps({"outcome": "unknown-source", "source": source, "known": known}))
+        raise typer.Exit(code=2)
+    result = ingest_page(ctx, page, file.read_bytes())
+    assert result.snapshot is not None
+    typer.echo(
+        json.dumps(
+            {
+                "outcome": "stored" if result.snapshot.created else "unchanged",
+                "source": source,
+                "file": file.name,
+                "revision": result.snapshot.revision,
+                "new_records": len(result.new_records),
+                "runs_enqueued": result.runs_enqueued,
+            }
+        )
+    )
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option("--host", help="Interface to listen on.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="Port to listen on.")] = 8000,
+) -> None:
+    """Serve the GitHub App webhook (spec 07) and run its jobs in this process.
+
+    For local use behind a tunnel. On GCP the webhook runs on Cloud Run and jobs go
+    through Pub/Sub to the worker (spec 09).
+    """
+    ctx = _context()
+    secret = ctx.settings.github_webhook_secret
+    if secret is None or ctx.github is None:
+        typer.echo(
+            json.dumps(
+                {
+                    "outcome": "not-configured",
+                    "reason": "set GUARDIAN_GITHUB_APP_ID, GUARDIAN_GITHUB_PRIVATE_KEY "
+                    "and GUARDIAN_GITHUB_WEBHOOK_SECRET",
+                }
+            )
+        )
+        raise typer.Exit(code=2)
+    queue = ctx.queue
+    if not isinstance(queue, InProcessQueue):
+        raise typer.Exit(code=2)
+    pipeline.register_handlers(queue, ctx)
+    lock = threading.Lock()
+
+    def drain_in_background() -> None:
+        def work() -> None:
+            with lock:  # one job at a time: runs are sequential in v3
+                queue.drain()
+
+        threading.Thread(target=work, daemon=True).start()
+
+    import uvicorn
+
+    webhook = create_app(
+        secret.get_secret_value().encode(), queue.publish, after_publish=drain_in_background
+    )
+    uvicorn.run(webhook, host=host, port=port)
 
 
 @app.command()
