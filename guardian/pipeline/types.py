@@ -76,6 +76,12 @@ class RunResult(BaseModel):
     bump_problems: list[str] = []
     patch_ref: str | None = None  # the unified diff, in the blob store
     fix_cost: float = 0.0
+    # API-level runs (spec 10).
+    api_source: str | None = None
+    api_records: int = 0  # upcoming records the repo was checked against
+    possible_usages: list[str] = []  # other-family calls and config files, never edited
+    shutdown_date: str | None = None  # the earliest shutdown among the findings
+    behaviour_change: bool = False  # a model swap: output, cost and limits may differ
 
 
 class PollResult(BaseModel):
@@ -91,6 +97,9 @@ class PollResult(BaseModel):
     awaiting_gate: int = 0  # notes still waiting (no gate yet, or it failed)
     runs_enqueued: int = 0
     errors: list[str] = []
+    api_pages_checked: int = 0
+    api_pages_unchanged: int = 0
+    api_records_new: int = 0
 
 
 class EventResult(BaseModel):

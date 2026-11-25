@@ -166,12 +166,41 @@ class FakePyPI:
         return httpx.Response(404, json={"message": "Not Found"})
 
 
-def combined_client(github: FakeGitHub, pypi: FakePyPI) -> httpx.Client:
+class FakePages:
+    """Provider pages served with ETags. A page never set answers 304 Not Modified, so
+    a poll that is not about pages sees nothing new."""
+
+    def __init__(self) -> None:
+        self.pages: dict[str, tuple[bytes, str]] = {}
+        self.requests: list[httpx.Request] = []
+
+    def set(self, url: str, data: bytes) -> None:
+        self.pages[url] = (data, f'"{hashlib.sha256(data).hexdigest()[:16]}"')
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        page = self.pages.get(str(request.url))
+        if page is None:
+            return httpx.Response(304)
+        data, etag = page
+        if request.headers.get("If-None-Match") == etag:
+            return httpx.Response(304, headers={"ETag": etag})
+        return httpx.Response(
+            200, content=data, headers={"ETag": etag, "Content-Type": "text/markdown"}
+        )
+
+
+def combined_client(
+    github: FakeGitHub, pypi: FakePyPI, pages: FakePages | None = None
+) -> httpx.Client:
     """One HTTP client that routes by host, like the real one the app uses."""
+    pages = pages or FakePages()
 
     def route(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.github.com":
             return github._handle(request)
+        if request.url.host == "developers.openai.com":
+            return pages.handle(request)
         return pypi.handle(request)
 
     return httpx.Client(transport=httpx.MockTransport(route))

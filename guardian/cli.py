@@ -5,6 +5,7 @@ The whole pipeline runs from here with no GitHub App and no cloud resources.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -12,13 +13,15 @@ import typer
 
 from guardian import pipeline
 from guardian.apidiff.gate import make_diff_assessor
+from guardian.apilevel.source import API_SOURCES, api_source
+from guardian.apilevel.source import ingest as ingest_page
 from guardian.common import db
 from guardian.common.config import get_settings
 from guardian.common.context import AppContext, build_context
 from guardian.common.log import configure_logging
 from guardian.extract.extractor import llm_available
 from guardian.extract.gate import make_release_assessor
-from guardian.pipeline.types import GATE_API_DIFF_ONLY, GATE_APPLIED, NOT_IMPLEMENTED, RunRequest
+from guardian.pipeline.types import GATE_API_DIFF_ONLY, GATE_APPLIED, RunRequest
 
 app = typer.Typer(
     help="API Change Guardian: applies provider changes to the code that depends on them.",
@@ -91,9 +94,27 @@ def ingest(
         typer.Option("--file", exists=True, dir_okay=False, help="Saved copy of the page."),
     ],
 ) -> None:
-    """Store a saved copy of a provider page as a snapshot (spec 10)."""
-    _context()
-    typer.echo(f'{{"outcome":"{NOT_IMPLEMENTED}","source":"{source}","file":"{file.name}"}}')
+    """Store a saved copy of a provider page as a snapshot (spec 10 F10.14)."""
+    ctx = _context()
+    page = api_source(source)
+    if page is None:
+        known = ", ".join(s.id for s in API_SOURCES)
+        typer.echo(json.dumps({"outcome": "unknown-source", "source": source, "known": known}))
+        raise typer.Exit(code=2)
+    result = ingest_page(ctx, page, file.read_bytes())
+    assert result.snapshot is not None
+    typer.echo(
+        json.dumps(
+            {
+                "outcome": "stored" if result.snapshot.created else "unchanged",
+                "source": source,
+                "file": file.name,
+                "revision": result.snapshot.revision,
+                "new_records": len(result.new_records),
+                "runs_enqueued": result.runs_enqueued,
+            }
+        )
+    )
 
 
 @app.command()

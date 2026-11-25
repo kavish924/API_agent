@@ -217,7 +217,7 @@ If time is short, protect those two.
 ## Phase 5 — GitHub App and API-level changes (week 5)
 
 ### GitHub App (spec 07)
-- [ ] Spec 07 marked `Approved`
+- [x] Spec 07 marked `Approved` — 2026-11-25
 - [ ] App registered; manifest committed; permissions exactly Contents RW, Pull requests RW, Issues RW, Metadata R [F7.1, F7.2]
 - [ ] Webhook signature check; 401 on failure [F7.3]
 - [ ] Installation events register and deactivate repos [F7.4, F7.20]
@@ -235,7 +235,7 @@ If time is short, protect those two.
 - [ ] Live test on a real test repo behind a webhook tunnel
 
 ### API-level changes (spec 10)
-- [ ] Spec 10 marked `Approved`
+- [x] Spec 10 marked `Approved` — 2026-11-25
 - [ ] `api-page` source: fetch the `.md` version with conditional requests; snapshot revisions [F10.1, F10.2]
 - [ ] Table parser in plain code; only new or changed rows go further [F10.3]
 - [ ] Record schema with `api_family`, `replacement_kind`, shutdown date; LLM only for prose cells [F10.4, F10.5]

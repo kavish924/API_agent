@@ -1,5 +1,5 @@
 # Spec 10 — API-level changes
-Status: Draft · Phase: 5 · PRD v3 ref: FR3 · Depends on: 01-change-discovery, 02-extraction, 04-repo-scanning, 05-fix-generation, 07-github-integration
+Status: Approved · Phase: 5 · PRD v3 ref: FR3 · Depends on: 01-change-discovery, 02-extraction, 04-repo-scanning, 05-fix-generation, 07-github-integration
 
 ## Goal
 Cover the changes that break code which changes nothing: a provider retires a model or
@@ -102,8 +102,25 @@ as SDK changes.
 - Demo timing: `gpt-5`, `gpt-5-mini`, `gpt-5-nano` and `o3` shut down on 2026-12-11.
   Phase 5 starts after that date, so the live demo will need a later retirement or a
   replay of the 2026-11-13 snapshot.
-- Default for `api_changes`: `pr` makes the better demo; `issue` is the more cautious
-  default for a behaviour change. Proposed: `pr`, as a draft with the label.
+- 2026-11-25: default for `api_changes` is `pr`, as a draft labelled a behaviour change.
+- 2026-11-25: the 2026-11-13 snapshot was never stored. The real-snapshot fixture is
+  the page fetched on 2026-11-25 (`tests/fixtures/pages/openai-deprecations-2026-11-25.md`);
+  the acceptance numbers are rewritten from what it contains. The five worked cases
+  are present on it unchanged.
+- 2026-11-25: every replacement cell on the page has one of four regular shapes (one
+  model ID; "`A` or `B`"; one model ID with settings in backticks; prose with no model
+  ID), so model rows are classified by plain code and need no LLM. A cell that fits no
+  shape is `none` (report-only). The LLM path of F10.5 is kept for later prose sources.
+- 2026-11-25: the "Feature and endpoint deprecations" table is parsed and stored as
+  `endpoint-sunset` records, report-only. Matching endpoints to SDK methods is not in
+  v3: those records are listed, not scanned.
+- 2026-11-25: a model ID belongs to a **set** of API families: text models such as
+  `gpt-5` serve both `chat` and `responses`. A call matches when its method's family is
+  in that set; a fix needs the replacement's set to equal the retired model's.
+- 2026-11-25: a run checks the repo against every upcoming record whose shutdown date
+  is in the future. The gate (new or changed rows) decides when runs start; this also
+  makes the install catch-up run (spec 07 F7.5) the same code path.
+- 2026-11-25: spec approved.
 - How long before the shutdown date should the app act: at once, or only inside a
   window? Proposed: at once.
 - 2026-11-13 (v3): new spec. v2 listed server-side changes as out of scope.

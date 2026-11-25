@@ -19,7 +19,7 @@ from guardian.common.jobs import InProcessQueue, Job, JobType
 from guardian.github_app.delivery import Delivery, deliver
 from guardian.pipeline.types import NOT_IMPLEMENTED, POLL_OK, RunRequest
 from guardian.watch.depfiles import NOT_USED
-from tests.fakes import OPENAI, FakeGitHub
+from tests.fakes import OPENAI, FakeGitHub, FakePages, FakePyPI, combined_client
 
 runner = CliRunner()
 
@@ -111,7 +111,11 @@ def cli_env(
     # The CLI builds its own context; give it the fake GitHub so no test hits the network.
     monkeypatch.setattr(
         "guardian.cli.build_context",
-        lambda settings: build_context(settings, http=github.client(), sleep=lambda _: None),
+        lambda settings: build_context(
+            settings,
+            http=combined_client(github, FakePyPI(), FakePages()),
+            sleep=lambda _: None,
+        ),
     )
     return database_url
 
@@ -212,8 +216,19 @@ def test_ingest_requires_an_existing_file(cli_env: str, tmp_path: Path) -> None:
     )
     assert missing.exit_code != 0
 
-    page = tmp_path / "page.html"
-    page.write_text("<html></html>", encoding="utf-8")
+    assert runner.invoke(app, ["migrate"]).exit_code == 0
+    page = tmp_path / "page.md"
+    page.write_text("# Deprecations\n", encoding="utf-8")
     ok = runner.invoke(app, ["ingest", "--source", "openai-deprecations", "--file", str(page)])
     assert ok.exit_code == 0, ok.output
-    assert _last_json(ok.output)["source"] == "openai-deprecations"
+    stored = _last_json(ok.output)
+    assert (stored["source"], stored["outcome"], stored["revision"]) == (
+        "openai-deprecations",
+        "stored",
+        1,
+    )
+    again = runner.invoke(app, ["ingest", "--source", "openai-deprecations", "--file", str(page)])
+    assert _last_json(again.output)["outcome"] == "unchanged"
+
+    unknown = runner.invoke(app, ["ingest", "--source", "nope", "--file", str(page)])
+    assert unknown.exit_code == 2 and _last_json(unknown.output)["outcome"] == "unknown-source"

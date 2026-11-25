@@ -1,0 +1,88 @@
+# API families (spec 10 F10.15). Reviewed by a person: a change here decides which
+# model swaps are fixed automatically. When a rule decided a case, the PR or issue
+# names it.
+#
+# [[models]]: the first rule whose glob matches a model ID wins, so specific rules come
+# first. `families` is a set: text models serve both Chat Completions and Responses.
+# An ID no rule matches is `unknown`, which is always report-only.
+#
+# [methods]: the canonical path prefix of an SDK method -> the family it calls. The
+# longest matching prefix wins.
+
+[[models]]
+glob = "*realtime*"
+families = ["realtime"]
+
+[[models]]
+glob = "*-tts*"
+families = ["audio.speech"]
+
+[[models]]
+glob = "tts-*"
+families = ["audio.speech"]
+
+[[models]]
+glob = "*transcribe*"
+families = ["audio.transcriptions"]
+
+[[models]]
+glob = "whisper-*"
+families = ["audio.transcriptions", "audio.translations"]
+
+[[models]]
+glob = "*image*"
+families = ["images"]
+
+[[models]]
+glob = "dall-e-*"
+families = ["images"]
+
+[[models]]
+glob = "text-embedding-*"
+families = ["embeddings"]
+
+[[models]]
+glob = "*moderation*"
+families = ["moderations"]
+
+[[models]]
+glob = "*codex*"
+families = ["responses"]
+
+[[models]]
+glob = "*deep-research*"
+families = ["responses"]
+
+[[models]]
+glob = "computer-use-*"
+families = ["responses"]
+
+# Audio-in/audio-out chat models (`gpt-audio`, `gpt-4o-audio`, ...) use Chat Completions.
+[[models]]
+glob = "*audio*"
+families = ["chat"]
+
+[[models]]
+glob = "gpt-*"
+families = ["chat", "responses"]
+
+[[models]]
+glob = "chatgpt-*"
+families = ["chat", "responses"]
+
+[[models]]
+glob = "o[0-9]*"
+families = ["chat", "responses"]
+
+[methods]
+"openai.resources.chat." = "chat"
+"openai.resources.responses." = "responses"
+"openai.resources.completions." = "completions"
+"openai.resources.audio.speech." = "audio.speech"
+"openai.resources.audio.transcriptions." = "audio.transcriptions"
+"openai.resources.audio.translations." = "audio.translations"
+"openai.resources.images." = "images"
+"openai.resources.embeddings." = "embeddings"
+"openai.resources.moderations." = "moderations"
+"openai.resources.realtime." = "realtime"
+"openai.resources.beta.realtime." = "realtime"

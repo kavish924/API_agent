@@ -1,5 +1,5 @@
 # Spec 07 — GitHub App integration
-Status: Draft · Phase: 5 · PRD v3 ref: FR7 · Depends on: 01-change-discovery, 06-verification, 11-agent-fixer
+Status: Approved · Phase: 5 · PRD v3 ref: FR7 · Depends on: 01-change-discovery, 06-verification, 11-agent-fixer
 
 ## Goal
 Operate as a real GitHub App: know which repositories are installed, and deliver each
@@ -89,6 +89,13 @@ nothing.
   latter.
 - Should the app also update its PR when the default branch moves and the PR
   conflicts? Proposed: not in v3; the next gated release refreshes it.
+- 2026-11-25: until the spec 06 sandbox exists, delivery uses an **interim static
+  verification**: L1 = every changed Python file compiles (no code runs) and Ruff finds
+  no new errors compared with the unpatched files; L2 = the static mypy check from
+  spec 11 finds no new errors. There is no L3. PRs say plainly that tests were not run.
+  The sandbox replaces this in spec 06.
+- 2026-11-25: spec approved. Built after spec 10 so both SDK and API-level results go
+  through the same delivery.
 - 2026-11-13 (v3): bump-PR trigger, stacked fix PR and comment fallback are replaced by
   installation events, a self-contained upgrade PR and an issue fallback. Issues
   permission added.

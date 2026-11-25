@@ -18,7 +18,7 @@ from guardian.common import db
 from guardian.common.config import Settings
 from guardian.common.context import AppContext, build_context
 from guardian.common.llm import StubProvider
-from tests.fakes import FakeGitHub, FakePyPI, combined_client
+from tests.fakes import FakeGitHub, FakePages, FakePyPI, combined_client
 
 
 @pytest.fixture(autouse=True)
@@ -83,6 +83,12 @@ def pypi() -> FakePyPI:
 
 
 @pytest.fixture
+def pages() -> FakePages:
+    """Fake provider pages (spec 10). An unset page answers 304."""
+    return FakePages()
+
+
+@pytest.fixture
 def slept() -> list[float]:
     """Backoff delays the code asked for. Tests never really wait."""
     return []
@@ -95,6 +101,7 @@ def ctx(
     stub: StubProvider,
     github: FakeGitHub,
     pypi: FakePyPI,
+    pages: FakePages,
     slept: list[float],
 ) -> Iterator[AppContext]:
     settings = Settings(
@@ -105,7 +112,7 @@ def ctx(
         _env_file=None,
     )
     context = build_context(
-        settings, provider=stub, http=combined_client(github, pypi), sleep=slept.append
+        settings, provider=stub, http=combined_client(github, pypi, pages), sleep=slept.append
     )
     yield context
     context.engine.dispose()

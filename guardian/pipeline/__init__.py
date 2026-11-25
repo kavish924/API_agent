@@ -19,7 +19,10 @@ import httpx
 from sqlalchemy import select
 
 from guardian.agent import AgentFixer, Budget, StaticTypeChecker, Workspace
+from guardian.apidiff.service import ApiDiffService
 from guardian.apidiff.wheels import cached_wheel
+from guardian.apilevel.run import latest_upcoming, record_api_run, run_api
+from guardian.apilevel.source import API_SOURCES, ApiSource, api_source, poll_api_source
 from guardian.common.context import AppContext
 from guardian.common.db import session_scope
 from guardian.common.jobs import InProcessQueue, Job, JobType
@@ -61,7 +64,7 @@ from guardian.scan.store import (
     record_fixes,
     record_scan,
 )
-from guardian.watch.depfiles import LocalRepoFiles
+from guardian.watch.depfiles import NOT_USED, LocalRepoFiles, find_pin
 from guardian.watch.documents import StoredDocument
 from guardian.watch.github import SourceError
 from guardian.watch.poller import mark_assessed, poll_sources
@@ -125,6 +128,7 @@ def poll(
     assessor: Assessor | None = None,
     gate_label: str = GATE_APPLIED,
     sources: Iterable[SdkSource] = SDK_SOURCES,
+    api_sources: Iterable[ApiSource] = API_SOURCES,
 ) -> PollResult:
     """Check every change source, apply the release gate, fan out runs (spec 01).
 
@@ -165,8 +169,20 @@ def poll(
             result.assessed += len(decided)
             result.awaiting_gate += len(source_poll.pending) - len(decided)
 
-        if result.errors:
-            result.outcome = POLL_FAILED if len(result.errors) == len(polls) else POLL_PARTIAL
+        sdk_errors = len(result.errors)
+        if sdk_errors:
+            result.outcome = POLL_FAILED if sdk_errors == len(polls) else POLL_PARTIAL
+        for api in api_sources:  # spec 10: provider pages, gated by their own records
+            page = poll_api_source(ctx, api)
+            result.api_pages_checked += 1
+            if page.error is not None:
+                result.errors.append(f"{api.id}: {page.error}")
+                result.outcome = POLL_PARTIAL
+                continue
+            if page.not_modified or (page.snapshot is not None and not page.snapshot.created):
+                result.api_pages_unchanged += 1
+            result.api_records_new += len(page.new_records)
+            result.runs_enqueued += page.runs_enqueued
         if gate_errors:
             result.errors += gate_errors
             result.outcome = POLL_PARTIAL
@@ -190,6 +206,9 @@ def run(request: RunRequest, ctx: AppContext) -> RunResult:
 
 
 def _run(request: RunRequest, ctx: AppContext) -> RunResult:
+    api = api_source(request.target.split("@", 1)[0])
+    if api is not None and request.package is None:
+        return _run_api(request, ctx, api)
     package = request.package or request.target.split("@", 1)[0]
     source = source_for_package(package)
     if source is None:
@@ -298,6 +317,81 @@ def _run(request: RunRequest, ctx: AppContext) -> RunResult:
     _record_patch(ctx, result, scan.findings, patch, mode)
     result.reason = "patch built; verification is not built yet (spec 06)"
     return result
+
+
+def _run_api(request: RunRequest, ctx: AppContext, api: ApiSource) -> RunResult:
+    """An API-level run: model retirements on a provider page (spec 10)."""
+    result = RunResult(outcome=NOT_IMPLEMENTED, api_source=api.id, behaviour_change=True)
+    checkout = Path(request.repo)
+    if not checkout.is_dir():
+        result.reason = "reading an installed repository needs the GitHub App (spec 07)"
+        return result
+    records = latest_upcoming(ctx, api)
+    result.api_records = len(records)
+    if not records:
+        result.outcome = NO_FINDINGS
+        result.reason = f"no upcoming records: {api.id} has no snapshot yet, or nothing is due"
+        return result
+    files = LocalRepoFiles(checkout)
+    pin = find_pin(files, api.module)
+    if pin.status == NOT_USED:
+        result.outcome = NOT_USED
+        result.reason = f"the repository does not use {api.module}"
+        return result
+    sdk = source_for_package(api.module)
+    if sdk is None:
+        result.reason = f"{api.module} is not a watched SDK"
+        return result
+    try:
+        version = pin.version or _latest_version(ctx, api.module)
+        surface = ApiDiffService.from_context(ctx).surface(sdk, version)
+    except Exception as exc:  # the SDK surface is needed to resolve calls
+        result.outcome = SOURCE_ERROR
+        result.reason = f"could not load the {api.module} API: {exc}"
+        return result
+    result.package, result.from_version = api.module, version
+
+    outcome = run_api(checkout, api, records, surface)
+    assert outcome.scan is not None
+    result.findings = len(outcome.findings)
+    result.finding_sites = len({(f.file, f.line, f.column) for f in outcome.findings})
+    result.files_scanned, result.files_parsed = outcome.scan.files_total, outcome.scan.files_parsed
+    result.possible_usages = [str(usage) for usage in outcome.possible]
+    shutdown = outcome.earliest_shutdown
+    result.shutdown_date = shutdown.isoformat() if shutdown else None
+    repo, head = local_identity(checkout)
+    status = NO_FINDINGS if not outcome.findings else NOT_IMPLEMENTED
+    result.run_id = record_api_run(
+        ctx.sessions,
+        repo=repo,
+        installation_id=LOCAL_INSTALLATION,
+        target=request.target,
+        head=request.head_sha or head,
+        result=outcome,
+        outcome=status,
+    )
+    result.outcome = status
+    if not outcome.findings:
+        result.reason = "no Python call passes a retiring model to its own API"
+        return result
+    patch = outcome.patch
+    assert patch is not None
+    result.patch_status = patch.status
+    result.fixed = patch.count(FIXED)
+    result.report_only = patch.count(REPORT_ONLY)
+    result.fix_failed = patch.count(FIX_FAILED)
+    result.patch_files = sorted(patch.files)
+    if patch.files:
+        key = f"patches/run-{result.run_id}.diff"
+        result.patch_ref = ctx.blobs.put(key, patch.diff().encode("utf-8"))
+    result.reason = "patch built; verification is not built yet (spec 06)"
+    return result
+
+
+def _latest_version(ctx: AppContext, package: str) -> str:
+    response = ctx.http.get(f"https://pypi.org/pypi/{package}/json")
+    response.raise_for_status()
+    return str(response.json()["info"]["version"])
 
 
 def _agent(
