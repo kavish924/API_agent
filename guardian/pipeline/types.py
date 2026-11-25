@@ -83,6 +83,11 @@ class RunResult(BaseModel):
     possible_usages: list[str] = []  # other-family calls and config files, never edited
     shutdown_date: str | None = None  # the earliest shutdown among the findings
     behaviour_change: bool = False  # a model swap: output, cost and limits may differ
+    # Delivery to GitHub (spec 07): pr-opened, pr-updated, issue-opened, issue-updated,
+    # declined, skipped-by-config or paused. None for local CLI runs.
+    delivery: str | None = None
+    delivery_number: int | None = None
+    delivery_url: str | None = None
 
 
 class PollResult(BaseModel):
@@ -105,3 +110,6 @@ class PollResult(BaseModel):
 
 class EventResult(BaseModel):
     outcome: str
+    activated: list[str] = []
+    deactivated: list[str] = []
+    runs_enqueued: int = 0

@@ -245,5 +245,6 @@ Dependabot PR, type-aware scanning with Pyright, Stripe dated API versions.
 | [`CHECKLIST.md`](CHECKLIST.md) | Phase-by-phase build checklist |
 | [`docs/system-guide.md`](docs/system-guide.md) | System guide: flow, components, pipeline stages, data model, safety rules |
 | [`docs/tech-stack.md`](docs/tech-stack.md) | Every library and service and why it was chosen |
+| [`docs/github-app-setup.md`](docs/github-app-setup.md) | Registering the GitHub App and running it locally behind a tunnel |
 | [`docs/architecture.md`](docs/architecture.md) | Diagrams: overview, sequence, agent loop, data model, trust boundaries, deployment |
 | [`specs/`](specs/README.md) | One spec per feature with numbered requirements, acceptance criteria and the phase plan |

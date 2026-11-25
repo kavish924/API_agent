@@ -29,10 +29,15 @@ runner = CliRunner()
 
 def test_entry_points_are_plain_functions(ctx: AppContext) -> None:
     assert pipeline.poll(ctx).outcome == POLL_OK
-    # An installed repository (not a local path) needs the GitHub App, which is spec 07.
-    request = RunRequest(repo="octo/app", target="openai@1.45.0", package="openai")
-    assert pipeline.run(request, ctx).outcome == NOT_IMPLEMENTED
-    assert pipeline.handle_event({"action": "created"}, ctx).outcome == NOT_IMPLEMENTED
+    # An installed repository needs the GitHub App; none is configured in this context.
+    request = RunRequest(
+        repo="octo/app", target="openai@1.45.0", package="openai", installation_id=1
+    )
+    result = pipeline.run(request, ctx)
+    assert result.outcome == NOT_IMPLEMENTED and "GitHub App" in (result.reason or "")
+    # An event without an installation changes nothing.
+    event = pipeline.handle_event({"event": "installation", "payload": {"action": "created"}}, ctx)
+    assert (event.outcome, event.activated, event.runs_enqueued) == ("applied", [], 0)
 
 
 def test_queue_invokes_all_three_job_types(
@@ -150,6 +155,12 @@ def test_run_help_lists_its_options() -> None:
     assert result.exit_code == 0
     for option in ("--repo", "--package", "--from", "--to", "--fix-mode", "--write-patch"):
         assert option in _plain(result.output)
+
+
+def test_serve_needs_the_app_settings(cli_env: str) -> None:
+    result = runner.invoke(app, ["serve"])
+    assert result.exit_code == 2
+    assert _last_json(result.output)["outcome"] == "not-configured"
 
 
 def test_plain_strips_colour_codes() -> None:

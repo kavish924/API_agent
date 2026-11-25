@@ -1,5 +1,5 @@
 # Spec 07 — GitHub App integration
-Status: Approved · Phase: 5 · PRD v3 ref: FR7 · Depends on: 01-change-discovery, 06-verification, 11-agent-fixer
+Status: Implemented · Phase: 5 · PRD v3 ref: FR7 · Depends on: 01-change-discovery, 06-verification, 11-agent-fixer
 
 ## Goal
 Operate as a real GitHub App: know which repositories are installed, and deliver each
@@ -43,19 +43,19 @@ nothing.
 | F7.20 | Uninstalling deactivates the repo; no further runs target it |
 
 ## Acceptance criteria
-- [ ] GIVEN a payload with an invalid signature, THEN the response is 401 and nothing is enqueued.
-- [ ] GIVEN an `installation.created` event for 2 repos, THEN 2 active rows exist and catch-up runs are enqueued.
-- [ ] GIVEN a verified patch, THEN a draft PR exists from `guardian/upgrade-openai` to the default branch, with one commit that changes the dependency file and the code, and the default branch has no new commit.
-- [ ] GIVEN a later release for the same package while the PR is open, THEN the same PR number now shows the new version and there is no second PR.
-- [ ] GIVEN the PR was closed covering changes {A, B}, WHEN a new release still affects only {A, B}, THEN no PR is opened.
-- [ ] GIVEN the same closed PR, WHEN a new release adds affected change C, THEN a new PR is opened.
-- [ ] GIVEN an `unverified` outcome on two consecutive runs, THEN the repo has exactly one guardian issue.
-- [ ] GIVEN issue-only mode, THEN no branch is created and the issue contains the diff.
-- [ ] GIVEN a `partial` patch, THEN the PR title marks it and the description lists the remaining call sites.
-- [ ] GIVEN the pause flag is set, THEN no PR, commit or issue is written and the run records `paused`.
-- [ ] GIVEN the same run job delivered twice, THEN one PR with one commit.
-- [ ] GIVEN the App is uninstalled, THEN the repo is inactive and a later fan-out skips it.
-- [ ] The permission list in the App manifest matches F7.2 exactly.
+- [x] GIVEN a payload with an invalid signature, THEN the response is 401 and nothing is enqueued.
+- [x] GIVEN an `installation.created` event for 2 repos, THEN 2 active rows exist and catch-up runs are enqueued.
+- [x] GIVEN a verified patch, THEN a draft PR exists from `guardian/upgrade-openai` to the default branch, with one commit that changes the dependency file and the code, and the default branch has no new commit.
+- [x] GIVEN a later release for the same package while the PR is open, THEN the same PR number now shows the new version and there is no second PR.
+- [x] GIVEN the PR was closed covering changes {A, B}, WHEN a new release still affects only {A, B}, THEN no PR is opened.
+- [x] GIVEN the same closed PR, WHEN a new release adds affected change C, THEN a new PR is opened.
+- [x] GIVEN an `unverified` outcome on two consecutive runs, THEN the repo has exactly one guardian issue.
+- [x] GIVEN issue-only mode, THEN no branch is created and the issue contains the diff.
+- [x] GIVEN a `partial` patch, THEN the PR title marks it and the description lists the remaining call sites.
+- [x] GIVEN the pause flag is set, THEN no PR, commit or issue is written and the run records `paused`.
+- [x] GIVEN the same run job delivered twice, THEN one PR with one commit.
+- [x] GIVEN the App is uninstalled, THEN the repo is inactive and a later fan-out skips it.
+- [x] The permission list in the App manifest matches F7.2 exactly.
 
 ## Technical notes
 - PRs and issues carry a hidden marker (`<!-- api-change-guardian:<package> -->`) so
@@ -69,6 +69,26 @@ nothing.
   affected code is left to Dependabot or Renovate, which avoids duplicate PRs in the
   common case.
 - The App manifest is committed to the repo.
+
+### As built (2026-11-25)
+- Code: `guardian/github_app/` — `client.py` (App JWT, installation tokens, retry),
+  `webhook.py` (FastAPI: signature check, enqueue, 202), `events.py` (installs,
+  catch-up runs), `checkout.py` (tarball of the default-branch commit, safe
+  extraction), `config.py` (`.github/guardian.yml`), `render.py` (titles and bodies with
+  the hidden marker), `reports.py` (findings to report rows), `publish.py` (PR or issue,
+  closed-item memory, Git Data API commit, pause gate). `guardian serve` runs the webhook
+  and worker locally. Manifest: `deploy/github-app-manifest.json`. Setup:
+  `docs/github-app-setup.md`.
+- An installed repo is downloaded at its default-branch commit and runs through the same
+  local pipeline; the run is stored under `owner/name` and the installation id.
+- Closed-item memory: one `pull_requests` row per (repo, subject) for the PR and one
+  per (repo, `<subject>:issue`) for the issue; `declined_change_ids` only grows. Change
+  ids are stable hashes of the change, so the same change is recognised across runs.
+- A redelivered job builds the same tree; if the branch already holds a commit with that
+  tree on the same parent, no commit is written and the PR is only re-rendered.
+- New files in a patch are written with mode `100644`.
+- Tested against an in-memory GitHub that checks the App's JWT and refuses workflow
+  files and non-forced ref moves. The live test on a real repository is still open.
 
 ## Test plan
 - Unit: signature check (F7.3), PR description rendering (F7.8), declined-set logic

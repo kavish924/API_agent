@@ -18,6 +18,7 @@ from guardian.common.config import Settings, get_settings
 from guardian.common.db import SessionFactory, make_engine, make_session_factory
 from guardian.common.jobs import InProcessQueue, JobQueue
 from guardian.common.llm import LLMClient, LLMProvider, UnconfiguredProvider
+from guardian.github_app.client import AppCredentials, GitHubApp
 
 
 @dataclass
@@ -33,6 +34,8 @@ class AppContext:
     is_paused: Callable[[], bool]
     # Used for retry backoff; tests replace it so they never really wait.
     sleep: Callable[[float], None] = time.sleep
+    # The GitHub App (spec 07); None until GUARDIAN_GITHUB_APP_ID and the key are set.
+    github: GitHubApp | None = None
 
 
 def _provider_from_settings(settings: Settings) -> LLMProvider:
@@ -52,8 +55,15 @@ def build_context(
     blobs: BlobStore | None = None,
     http: httpx.Client | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    github: GitHubApp | None = None,
 ) -> AppContext:
     settings = settings or get_settings()
+    client = http or httpx.Client(timeout=30.0, follow_redirects=True)
+    if github is None and settings.github_app_id and settings.github_private_key:
+        credentials = AppCredentials(
+            settings.github_app_id, settings.github_private_key.get_secret_value()
+        )
+        github = GitHubApp(client, credentials, sleep=sleep)
     engine = make_engine(settings.database_url)
     sessions = make_session_factory(engine)
     return AppContext(
@@ -67,7 +77,8 @@ def build_context(
             sessions=sessions,
             default_model=settings.llm_model or "unset",
         ),
-        http=http or httpx.Client(timeout=30.0, follow_redirects=True),
+        http=client,
         is_paused=lambda: settings.paused,
         sleep=sleep,
+        github=github,
     )

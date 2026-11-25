@@ -20,12 +20,21 @@ BEFORE = "import fakesdk\n\nx = fakesdk.get(id='k')\ny = fakesdk.old()\n"
 
 
 def checker(tmp_path: Path) -> StaticTypeChecker:
-    old = tree(tmp_path / "old", {"fakesdk/__init__.py": "def get(id: str) -> str: ...\n"
-                                  "def old() -> int: ...\n", "fakesdk/py.typed": ""})
-    new = tree(tmp_path / "new", {"fakesdk/__init__.py": "def get(id: str, /) -> str: ...\n",
-                                  "fakesdk/py.typed": ""})
-    repo = tree(tmp_path / "repo", {"app.py": BEFORE, "pyproject.toml":
-                                    "[tool.ruff.lint]\nselect = ['ALL']\n"})
+    old = tree(
+        tmp_path / "old",
+        {
+            "fakesdk/__init__.py": "def get(id: str) -> str: ...\ndef old() -> int: ...\n",
+            "fakesdk/py.typed": "",
+        },
+    )
+    new = tree(
+        tmp_path / "new",
+        {"fakesdk/__init__.py": "def get(id: str, /) -> str: ...\n", "fakesdk/py.typed": ""},
+    )
+    repo = tree(
+        tmp_path / "repo",
+        {"app.py": BEFORE, "pyproject.toml": "[tool.ruff.lint]\nselect = ['ALL']\n"},
+    )
     return StaticTypeChecker(repo, lambda: new, base_sdk_dir=lambda: old)
 
 
