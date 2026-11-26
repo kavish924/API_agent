@@ -83,3 +83,34 @@ def test_the_repo_ruff_config_is_not_used(tmp_path: Path) -> None:
 def test_without_a_type_checker_l1_is_the_limit(tmp_path: Path) -> None:
     result = verify_static({"app.py": (BEFORE, BEFORE.replace("'k'", "'j'"))}, None)
     assert result.level == L1 and "L2 not checked" in result.notes[-1]
+
+
+def test_report_only_lines_follow_the_edit() -> None:
+    from guardian.verify.static import after_lines
+
+    before = "a\nb\nc\nd\n"
+    after = "a\nb1\nb2\nb3\nc\nd\n"  # line 2 became three lines
+    assert after_lines(before, after, [1, 3, 4]) == {1, 5, 6}
+    assert after_lines(before, after, [2]) == {2, 3, 4}
+    assert after_lines("a\nb\n", "a\n", [2]) == set()
+
+
+def test_a_new_error_above_a_shifted_report_only_line_is_not_hidden(tmp_path: Path) -> None:
+    # `old()` (line 4) stays for a person; the fix grows line 3 into three lines, so it
+    # sits on line 6 after the patch, and a new error on line 4 must still fail L2.
+    after = BEFORE.replace(
+        "x = fakesdk.get(id='k')\n", "x = fakesdk.get(\n    'k'\n)\nz: int = fakesdk.get('q')\n"
+    )
+    result = verify_static(
+        {"app.py": (BEFORE, after)}, checker(tmp_path), report_only_lines={"app.py": [4]}
+    )
+    assert result.level == L1, result
+    assert any("app.py:6" in e for e in result.type_errors)
+    assert any("app.py:7" in e for e in result.remaining)
+
+
+def test_lint_errors_name_the_right_file_when_names_overlap() -> None:
+    from guardian.verify.static import _ruff
+
+    files = {"app.py": "x = 1\n", "tools/app.py": "y = undefined_name\n", "myapp.py": "z = 2\n"}
+    assert _ruff(files) == [("tools/app.py", "F821", "Undefined name `undefined_name`")]

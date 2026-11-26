@@ -39,7 +39,7 @@ from guardian.common.models import ChangeRecord, Finding, Repo
 from guardian.fix import FIXED, REPORT_ONLY
 from guardian.pipeline.types import NO_FINDINGS, RunRequest
 from tests.apifixtures import write_tree
-from tests.fakes import FakePages, FakePyPI
+from tests.fakes import FakeGitHub, FakePages, FakePyPI
 
 PAGE = Path(__file__).parent / "fixtures" / "pages" / "openai-deprecations-2026-11-25.md"
 TODAY = date(2026, 11, 25)
@@ -442,3 +442,46 @@ def test_pipeline_api_run_with_nothing_affected(
     )
     result = pipeline.run(RunRequest(repo=str(root), target="openai-deprecations@r1"), ctx)
     assert (result.outcome, result.findings, result.patch_ref) == (NO_FINDINGS, 0, None)
+
+
+def test_a_failed_gate_is_retried_by_the_next_poll(
+    ctx: AppContext, pages: FakePages, page: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import guardian.apilevel.source as source_module
+
+    _active_repos(ctx, "acme/a")
+    pages.set(SOURCE.url, page.encode("utf-8"))
+    real = source_module.fan_out_api
+
+    def broken(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("database went away")
+
+    monkeypatch.setattr(source_module, "fan_out_api", broken)
+    with pytest.raises(RuntimeError):
+        poll_api_source(ctx, SOURCE, today=TODAY)
+    monkeypatch.setattr(source_module, "fan_out_api", real)
+
+    retried = poll_api_source(ctx, SOURCE, today=TODAY)  # the page itself is unchanged
+    assert retried.runs_enqueued == 1 and len(retried.new_records) == 58
+    assert poll_api_source(ctx, SOURCE, today=TODAY).runs_enqueued == 0  # gated once only
+
+
+def test_poll_outcome_counts_sdk_sources_and_api_pages_together(
+    ctx: AppContext, github: FakeGitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import guardian.pipeline as pipeline_module
+    from guardian.apilevel.source import ApiPoll
+    from guardian.pipeline.types import POLL_FAILED, POLL_PARTIAL
+    from tests.fakes import OPENAI, STRIPE
+
+    github.fail_with[OPENAI] = 500
+    github.fail_with[STRIPE] = 500
+    # Every SDK source fails and the page answers 304: one source worked.
+    assert pipeline.poll(ctx).outcome == POLL_PARTIAL
+
+    def page_down(ctx: AppContext, source: object) -> ApiPoll:
+        return ApiPoll(SOURCE, error="GET page: HTTP 503")
+
+    monkeypatch.setattr(pipeline_module, "poll_api_source", page_down)
+    # Everything fails: the poll says so.
+    assert pipeline.poll(ctx).outcome == POLL_FAILED

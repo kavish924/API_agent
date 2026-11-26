@@ -278,6 +278,7 @@ class Publisher:
         base = self.remote.head_sha
         repo = f"/repos/{self.repo}"
         base_tree = self.gh.get(self.inst, f"{repo}/git/commits/{base}")["tree"]["sha"]
+        modes = self._modes(base_tree, files)
         tree = self.gh.request(
             self.inst,
             "POST",
@@ -285,7 +286,12 @@ class Publisher:
             json={
                 "base_tree": base_tree,
                 "tree": [
-                    {"path": path, "mode": "100644", "type": "blob", "content": text}
+                    {
+                        "path": path,
+                        "mode": modes.get(path, "100644"),
+                        "type": "blob",
+                        "content": text,
+                    }
                     for path, text in sorted(files.items())
                 ],
             },
@@ -326,6 +332,18 @@ class Publisher:
                 json={"sha": commit, "force": True},
             )
         return str(commit)
+
+    def _modes(self, base_tree: str, files: dict[str, str]) -> dict[str, str]:
+        """Each changed file's mode in the base tree, so an executable stays executable."""
+        tree = self.gh.get(
+            self.inst, f"/repos/{self.repo}/git/trees/{base_tree}", params={"recursive": "1"}
+        )
+        modes: dict[str, str] = {}
+        for entry in tree.get("tree", []):
+            path, mode = entry.get("path"), entry.get("mode")
+            if path in files and mode in ("100644", "100755"):
+                modes[path] = mode
+        return modes
 
     def _find_open_pr(self, branch: str) -> dict[str, Any] | None:
         owner = self.repo.split("/", 1)[0]

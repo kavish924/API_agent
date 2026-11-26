@@ -159,13 +159,30 @@ def fan_out_api(ctx: AppContext, source: ApiSource, revision: int) -> int:
     return len(repos)
 
 
+def _gated_key(source: ApiSource, revision: int) -> str:
+    return f"api/{source.id}/r{revision}.gated"
+
+
 def _gate(ctx: AppContext, result: ApiPoll, today: date) -> None:
-    assert result.snapshot is not None
-    if not result.snapshot.created:
-        return  # unchanged content: nothing new, no runs (acceptance: unchanged page)
-    result.new_records = new_records(ctx, result.source, result.snapshot, today)
+    """Gate a revision once. The marker is written only after fan-out succeeds, so a
+    failure is retried by the next poll instead of the revision being skipped for good."""
+    snapshot = result.snapshot
+    assert snapshot is not None
+    marker = _gated_key(result.source, snapshot.revision)
+    if ctx.blobs.exists(marker):
+        return  # already gated: unchanged content starts nothing (acceptance: unchanged page)
+    result.new_records = new_records(ctx, result.source, snapshot, today)
     if result.new_records:
-        result.runs_enqueued = fan_out_api(ctx, result.source, result.snapshot.revision)
+        result.runs_enqueued = fan_out_api(ctx, result.source, snapshot.revision)
+    ctx.blobs.put(marker, f"{len(result.new_records)} records".encode())
+
+
+def latest_snapshot(ctx: AppContext, source: ApiSource) -> Snapshot | None:
+    with session_scope(ctx.sessions) as session:
+        row = _latest(session, source.id)
+        if row is None:
+            return None
+        return Snapshot(source.id, row.revision, row.blob_ref, created=False)
 
 
 def poll_api_source(ctx: AppContext, source: ApiSource, *, today: date | None = None) -> ApiPoll:
@@ -189,6 +206,10 @@ def poll_api_source(ctx: AppContext, source: ApiSource, *, today: date | None = 
         return result
     if response.status_code == 304:
         result.not_modified = True
+        latest = latest_snapshot(ctx, source)
+        if latest is not None and not ctx.blobs.exists(_gated_key(source, latest.revision)):
+            result.snapshot = latest  # an earlier gate failed: run it now
+            _gate(ctx, result, today)
         return result
     if response.status_code != 200:
         result.error = f"GET {source.url}: HTTP {response.status_code}"

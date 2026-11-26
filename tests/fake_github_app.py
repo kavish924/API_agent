@@ -51,6 +51,8 @@ class FakeRepo:
     commits: dict[str, dict[str, Any]] = field(default_factory=dict)  # sha -> {tree, parents}
     refs: dict[str, str] = field(default_factory=dict)  # branch -> commit sha
     items: dict[int, dict[str, Any]] = field(default_factory=dict)  # pulls and issues by number
+    modes: dict[str, str] = field(default_factory=dict)  # path -> mode, 100644 if unset
+    sent_modes: dict[str, str] = field(default_factory=dict)  # modes the last tree POST used
 
     def head(self, branch: str | None = None) -> str:
         return self.refs[branch or self.default_branch]
@@ -169,8 +171,18 @@ class FakeGitHubApp:
                     "parents": [{"sha": p} for p in commit["parents"]],
                 },
             )
+        if (m := re.match(r"^/git/trees/(.+)$", rest)) and method == "GET":
+            files = repo.trees.get(m.group(1))
+            if files is None:
+                return httpx.Response(404, json={"message": "Not Found"})
+            entries = [
+                {"path": path, "mode": repo.modes.get(path, "100644"), "type": "blob"}
+                for path in sorted(files)
+            ]
+            return httpx.Response(200, json={"sha": m.group(1), "tree": entries})
         if rest == "/git/trees" and method == "POST":
             files = dict(repo.trees[body["base_tree"]])
+            repo.sent_modes = {e["path"]: e["mode"] for e in body["tree"]}
             for entry in body["tree"]:
                 if entry["path"].startswith(".github/workflows/"):
                     return httpx.Response(403, json={"message": "workflows permission"})

@@ -88,4 +88,9 @@ def fetch_checkout(
         response = gh.request(installation_id, "GET", f"/repos/{full_name}/tarball/{sha}")
         extract_tarball(response.content, path)
         marker.write_text(sha, encoding="utf-8")
+    # Only the current commit is kept: older ones would fill the disk. Runs are
+    # sequential in v3, so no other run is reading an older checkout of this repo.
+    for other in path.parent.iterdir():
+        if other != path and other.is_dir():
+            shutil.rmtree(other, ignore_errors=True)
     return RemoteRepo(full_name, installation_id, branch, sha, path)
