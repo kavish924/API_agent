@@ -16,6 +16,7 @@ There is no L3: tests are not run until the sandbox exists, and the PR says so.
 
 from __future__ import annotations
 
+import difflib
 import json
 import subprocess
 import sys
@@ -123,13 +124,38 @@ def _new(
     return out
 
 
+def after_lines(before: str, after: str, lines: Sequence[int]) -> set[int]:
+    """Where lines of `before` sit in `after`, through a line diff.
+
+    An unchanged line maps one to one; a line inside a replaced block maps to every line
+    of its replacement; a deleted line maps to nothing.
+    """
+    matcher = difflib.SequenceMatcher(None, before.splitlines(), after.splitlines(), autojunk=False)
+    opcodes = matcher.get_opcodes()
+    out: set[int] = set()
+    for line in lines:
+        index = line - 1
+        for tag, i1, i2, j1, j2 in opcodes:
+            if i1 <= index < i2:
+                if tag == "equal":
+                    out.add(j1 + (index - i1) + 1)
+                else:
+                    out.update(range(j1 + 1, j2 + 1))
+                break
+    return out
+
+
 def verify_static(
     changed: Mapping[str, tuple[str, str]],
     typechecker: TypeChecker | None,
     *,
     report_only_lines: Mapping[str, Sequence[int]] | None = None,
 ) -> Verification:
-    """Verify the Python files of a patch. `changed` maps path -> (before, after)."""
+    """Verify the Python files of a patch. `changed` maps path -> (before, after).
+
+    `report_only_lines` are the lines, in the **before** text, of call sites the patch
+    leaves for a person; type errors there are remaining work, not an L2 failure.
+    """
     python = {path: texts for path, texts in changed.items() if path.endswith(".py")}
     after = {path: texts[1] for path, texts in python.items()}
     before = {path: texts[0] for path, texts in python.items()}
@@ -156,9 +182,13 @@ def verify_static(
     except TypecheckUnavailable as exc:
         result.notes.append(f"L2 not checked: {exc}")
         return result
-    left = report_only_lines or {}
+    left: dict[str, set[int]] = {}
+    for path, lines in (report_only_lines or {}).items():
+        texts = changed.get(path)
+        # Findings carry before-text lines; mypy reports after-text lines.
+        left[path] = after_lines(texts[0], texts[1], lines) if texts else set(lines)
     for issue in issues:
-        if issue.line in left.get(issue.file, ()):
+        if issue.line in left.get(issue.file, set()):
             result.remaining.append(str(issue))
         else:
             result.type_errors.append(str(issue))

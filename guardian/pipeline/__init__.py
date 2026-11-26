@@ -96,6 +96,7 @@ __all__ = [
 log = get_logger(__name__)
 
 PACKAGE_NOT_WATCHED = "package-not-watched"
+DELIVERY_FAILED = "delivery-failed"  # a GitHub call failed; the next run retries it
 REPO_INACTIVE = "repo-inactive"  # the App was uninstalled there (F7.20)
 SOURCE_ERROR = "source-error"
 
@@ -394,7 +395,16 @@ def _run_sdk(request: RunRequest, ctx: AppContext, remote: RemoteRepo | None) ->
 
 def _publish(ctx: AppContext, remote: RemoteRepo, report: Report, result: RunResult) -> None:
     assert ctx.github is not None
-    published = Publisher(ctx, ctx.github, remote).publish(report, read_config(remote.path))
+    try:
+        published = Publisher(ctx, ctx.github, remote).publish(report, read_config(remote.path))
+    except (GitHubError, httpx.HTTPError) as exc:
+        # The run's work is stored; delivery is retried by the next run for this target.
+        log.error(
+            "delivery failed", extra={"fields": {"repo": remote.full_name, "error": str(exc)}}
+        )
+        result.delivery = DELIVERY_FAILED
+        result.reason = f"delivery failed: {exc}"
+        return
     result.delivery = published.action
     result.delivery_number = published.number
     result.delivery_url = published.url

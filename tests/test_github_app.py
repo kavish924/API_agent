@@ -526,3 +526,63 @@ def test_the_manifest_asks_for_exactly_the_spec_permissions() -> None:
     }
     assert "workflows" not in manifest["default_permissions"]
     assert manifest["public"] is False
+
+
+def test_untrusted_text_cannot_mention_people_or_load_images(
+    publisher: Publisher, fake: FakeGitHubApp
+) -> None:
+    report = _report("A")
+    hostile = "Thanks @octo-org/maintainers ![x](https://t.example/p.png) <img src=x>"
+    report.items = [
+        ReportItem(
+            "app.py",
+            3,
+            "c.create(engine='e')",
+            "change `A`",
+            "A",
+            hostile,
+            "https://example/notes",
+            "high",
+            FIXED,
+            "codemod",
+            "",
+        )
+    ]
+    publisher.publish(report, RepoConfig())
+    (pr,) = fake.repos[REPO].pulls()
+    assert "@octo-org" not in pr["body"] and "@⁠octo-org" in pr["body"]
+    assert "![x]" not in pr["body"] and "<img" not in pr["body"]
+
+
+def test_an_executable_file_stays_executable(publisher: Publisher, fake: FakeGitHubApp) -> None:
+    fake.repos[REPO].modes["app.py"] = "100755"
+    publisher.publish(_report("A"), RepoConfig())
+    assert fake.repos[REPO].sent_modes == {"app.py": "100755", "requirements.txt": "100644"}
+
+
+def test_a_failed_delivery_is_recorded_not_raised(
+    app_ctx: AppContext,
+    fake: FakeGitHubApp,
+    github: FakeGitHub,
+    pypi: FakePyPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from guardian.github_app.client import GitHubError
+
+    pypi.add_wheel("openai", "1.0.0", _as_openai(V1))
+    pypi.add_wheel("openai", "2.0.0", _as_openai(V2))
+    github.add_release(OPENAI, "v1.0.0", "## 1.0.0\n")
+    github.add_release(OPENAI, "v2.0.0", "## 2.0.0\n\n* changes\n")
+    fake.add_repo(REPO, {"requirements.txt": "openai==1.0.0\n", "app.py": BEFORE_APP})
+    app_ctx.llm.provider = UnconfiguredProvider()
+
+    def refuse(self: Publisher, report: Report, config: RepoConfig) -> None:
+        raise GitHubError(422, "POST", "/pulls", "A pull request already exists")
+
+    monkeypatch.setattr(Publisher, "publish", refuse)
+    request = RunRequest(
+        repo=REPO, target="openai@latest", package="openai", installation_id=INSTALLATION
+    )
+    result = pipeline.run(request, app_ctx)
+    assert result.delivery == "delivery-failed"
+    assert "A pull request already exists" in (result.reason or "")

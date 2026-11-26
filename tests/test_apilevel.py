@@ -442,3 +442,25 @@ def test_pipeline_api_run_with_nothing_affected(
     )
     result = pipeline.run(RunRequest(repo=str(root), target="openai-deprecations@r1"), ctx)
     assert (result.outcome, result.findings, result.patch_ref) == (NO_FINDINGS, 0, None)
+
+
+def test_a_failed_gate_is_retried_by_the_next_poll(
+    ctx: AppContext, pages: FakePages, page: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import guardian.apilevel.source as source_module
+
+    _active_repos(ctx, "acme/a")
+    pages.set(SOURCE.url, page.encode("utf-8"))
+    real = source_module.fan_out_api
+
+    def broken(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("database went away")
+
+    monkeypatch.setattr(source_module, "fan_out_api", broken)
+    with pytest.raises(RuntimeError):
+        poll_api_source(ctx, SOURCE, today=TODAY)
+    monkeypatch.setattr(source_module, "fan_out_api", real)
+
+    retried = poll_api_source(ctx, SOURCE, today=TODAY)  # the page itself is unchanged
+    assert retried.runs_enqueued == 1 and len(retried.new_records) == 58
+    assert poll_api_source(ctx, SOURCE, today=TODAY).runs_enqueued == 0  # gated once only

@@ -68,9 +68,25 @@ class Report:
         return 0 < self.fixed < len(self.items)
 
 
+WORD_JOINER = "\u2060"
+
+
+def neutral(text: str) -> str:
+    """Untrusted text (release notes, provider pages, repo code) made inert in Markdown.
+
+    A word joiner after `@` stops mentions from notifying anyone; HTML is escaped; image
+    syntax is broken so nothing is loaded from a URL the source chose.
+    """
+    text = text.replace("@", "@" + WORD_JOINER)
+    text = text.replace("<", "&lt;").replace(">", "&gt;")
+    return text.replace("![", r"!\[")
+
+
 def _cell(text: str, limit: int = 160) -> str:
-    text = " ".join(text.split()).replace("|", "\\|")
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+    text = " ".join(text.split())
+    if len(text) > limit:
+        text = text[: limit - 1] + "…"
+    return neutral(text).replace("|", r"\|")
 
 
 def pr_title(report: Report) -> str:

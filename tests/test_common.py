@@ -150,3 +150,22 @@ def test_queue_rejects_unhandled_job_types() -> None:
 
 def test_jobs_get_unique_ids() -> None:
     assert Job(JobType.POLL).id != Job(JobType.POLL).id
+
+
+def test_a_failing_job_does_not_stop_the_queue() -> None:
+    queue = InProcessQueue()
+    ran: list[str] = []
+
+    def handler(job: Job) -> None:
+        if job.payload.get("boom"):
+            raise RuntimeError("GitHub said no")
+        ran.append(job.payload["name"])
+
+    queue.register(JobType.RUN, handler)
+    queue.publish(Job(JobType.RUN, {"name": "a"}))
+    queue.publish(Job(JobType.RUN, {"boom": True}))
+    queue.publish(Job(JobType.RUN, {"name": "c"}))
+    assert queue.drain() == 3
+    assert ran == ["a", "c"]
+    ((failed, error),) = queue.failed
+    assert failed.payload == {"boom": True} and error == "RuntimeError: GitHub said no"

@@ -13,6 +13,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
+from guardian.common.log import get_logger
+
+log = get_logger(__name__)
+
 
 class JobType(StrEnum):
     POLL = "poll"  # check every change source
@@ -40,6 +44,9 @@ class InProcessQueue:
     def __init__(self) -> None:
         self._jobs: deque[Job] = deque()
         self._handlers: dict[JobType, Handler] = {}
+        # Jobs whose handler raised, with the error. One failed job never stops the
+        # rest of the queue (the Pub/Sub queue of spec 09 dead-letters them instead).
+        self.failed: list[tuple[Job, str]] = []
 
     def register(self, job_type: JobType, handler: Handler) -> None:
         self._handlers[job_type] = handler
@@ -58,6 +65,10 @@ class InProcessQueue:
             handler = self._handlers.get(job.type)
             if handler is None:
                 raise LookupError(f"No handler registered for job type {job.type.value!r}.")
-            handler(job)
+            try:
+                handler(job)
+            except Exception as exc:  # isolate the job; the queue goes on
+                self.failed.append((job, f"{type(exc).__name__}: {exc}"))
+                log.exception("job failed", extra={"fields": {"type": job.type.value}})
             handled += 1
         return handled
