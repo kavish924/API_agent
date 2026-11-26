@@ -586,3 +586,15 @@ def test_a_failed_delivery_is_recorded_not_raised(
     result = pipeline.run(request, app_ctx)
     assert result.delivery == "delivery-failed"
     assert "A pull request already exists" in (result.reason or "")
+
+
+def test_only_the_current_commit_is_kept_on_disk(app_ctx: AppContext, fake: FakeGitHubApp) -> None:
+    assert app_ctx.github is not None
+    fake.add_repo(REPO, {"app.py": "x = 1\n"})
+    first = fetch_checkout(app_ctx.github, INSTALLATION, REPO, app_ctx.settings.work_dir)
+    fake.push(REPO, {"app.py": "x = 2\n"})
+    second = fetch_checkout(app_ctx.github, INSTALLATION, REPO, app_ctx.settings.work_dir)
+    assert second.head_sha != first.head_sha
+    assert not first.path.exists()
+    assert [p.name for p in second.path.parent.iterdir()] == [second.head_sha]
+    assert (second.path / "app.py").read_text() == "x = 2\n"

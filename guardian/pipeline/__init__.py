@@ -179,20 +179,20 @@ def poll(
             result.assessed += len(decided)
             result.awaiting_gate += len(source_poll.pending) - len(decided)
 
-        sdk_errors = len(result.errors)
-        if sdk_errors:
-            result.outcome = POLL_FAILED if sdk_errors == len(polls) else POLL_PARTIAL
         for api in api_sources:  # spec 10: provider pages, gated by their own records
             page = poll_api_source(ctx, api)
             result.api_pages_checked += 1
             if page.error is not None:
                 result.errors.append(f"{api.id}: {page.error}")
-                result.outcome = POLL_PARTIAL
                 continue
             if page.not_modified or (page.snapshot is not None and not page.snapshot.created):
                 result.api_pages_unchanged += 1
             result.api_records_new += len(page.new_records)
             result.runs_enqueued += page.runs_enqueued
+        # Decided once, over every source checked: SDK sources and API pages alike.
+        failed, checked = len(result.errors), len(polls) + result.api_pages_checked
+        if failed:
+            result.outcome = POLL_FAILED if failed == checked else POLL_PARTIAL
         if gate_errors:
             result.errors += gate_errors
             result.outcome = POLL_PARTIAL

@@ -107,3 +107,10 @@ def test_a_new_error_above_a_shifted_report_only_line_is_not_hidden(tmp_path: Pa
     assert result.level == L1, result
     assert any("app.py:6" in e for e in result.type_errors)
     assert any("app.py:7" in e for e in result.remaining)
+
+
+def test_lint_errors_name_the_right_file_when_names_overlap() -> None:
+    from guardian.verify.static import _ruff
+
+    files = {"app.py": "x = 1\n", "tools/app.py": "y = undefined_name\n", "myapp.py": "z = 2\n"}
+    assert _ruff(files) == [("tools/app.py", "F821", "Undefined name `undefined_name`")]

@@ -99,13 +99,19 @@ def _ruff(files: Mapping[str, str]) -> list[tuple[str, str, str]]:
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise TypecheckUnavailable(f"ruff could not run: {exc}") from exc
-    if completed.returncode not in (0, 1):
-        raise TypecheckUnavailable("ruff failed: " + completed.stderr.strip()[-200:])
-    out: list[tuple[str, str, str]] = []
-    for item in json.loads(completed.stdout or "[]"):
-        name = Path(item["filename"]).as_posix()
-        relative = next((p for p in files if name.endswith(p)), name)
-        out.append((relative, str(item.get("code")), str(item.get("message"))))
+        if completed.returncode not in (0, 1):
+            raise TypecheckUnavailable("ruff failed: " + completed.stderr.strip()[-200:])
+        # Paths are made relative while the files still exist, so `resolve()` sees the
+        # same real path for the temp root and for Ruff's absolute file names.
+        base = root.resolve()
+        out: list[tuple[str, str, str]] = []
+        for item in json.loads(completed.stdout or "[]"):
+            name = Path(item["filename"])
+            try:
+                relative = name.resolve().relative_to(base).as_posix()
+            except ValueError:  # not under the temp root: keep Ruff's name
+                relative = name.as_posix()
+            out.append((relative, str(item.get("code")), str(item.get("message"))))
     return out
 
 
