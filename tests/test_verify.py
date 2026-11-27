@@ -114,3 +114,18 @@ def test_lint_errors_name_the_right_file_when_names_overlap() -> None:
 
     files = {"app.py": "x = 1\n", "tools/app.py": "y = undefined_name\n", "myapp.py": "z = 2\n"}
     assert _ruff(files) == [("tools/app.py", "F821", "Undefined name `undefined_name`")]
+
+
+def test_ruff_runs_isolated_from_the_patched_files(tmp_path: Path) -> None:
+    from guardian.verify.static import _ruff
+
+    marker = tmp_path / "pwned"
+    payload = f"open({str(marker)!r}, 'w').write('ran')\n"
+    files = {
+        "ruff/__init__.py": payload,
+        "ruff/__main__.py": payload,
+        "json.py": payload,
+        "app.py": "x = 1\n",
+    }
+    assert _ruff(files) == []
+    assert not marker.exists()

@@ -143,6 +143,9 @@ class StaticTypeChecker:
             target.write_bytes(text.encode("utf-8"))
         command = [
             sys.executable,
+            # Isolated mode: the working directory (the repo copy) is never on sys.path,
+            # so a repo's `mypy/` package or `json.py` cannot replace the real modules.
+            "-I",
             "-m",
             "mypy",
             "--config-file",
