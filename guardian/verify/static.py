@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,11 @@ TESTS_NOT_RUN = "tests were not run: interim static verification (spec 06 sandbo
 # Syntax errors and names that do not exist: what a broken edit looks like to Ruff.
 RUFF_RULES = "E9,F63,F7,F82"
 RUFF_TIMEOUT = 60
+# What a subprocess needs to start, and nothing else.
+_MINIMAL_ENV = {
+    "PATH": os.environ.get("PATH", ""),
+    "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),  # Windows needs it to start
+}
 
 
 @dataclass
@@ -77,6 +83,7 @@ def _ruff(files: Mapping[str, str]) -> list[tuple[str, str, str]]:
             target.write_bytes(text.encode("utf-8"))
         command = [
             sys.executable,
+            "-I",  # isolated: the folder of untrusted files is never on sys.path
             "-m",
             "ruff",
             "check",
@@ -92,6 +99,7 @@ def _ruff(files: Mapping[str, str]) -> list[tuple[str, str, str]]:
             completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
                 command,
                 cwd=root,
+                env=_MINIMAL_ENV,  # no secrets from the worker's environment
                 capture_output=True,
                 text=True,
                 timeout=RUFF_TIMEOUT,

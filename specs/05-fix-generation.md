@@ -107,6 +107,14 @@ and patch assembly. The agent fixer is spec 11 and plugs in as Tier 2.
   statement must already appear in the statements it replaces, or be bound by an
   import from the watched SDK. This rejects wrapping the call in `eval`, `exec`,
   `getattr`, `__import__`, `open` and similar.
+- 2026-11-27 (security review): the guard also rejects **risky attributes and keys**.
+  A new statement may not introduce a dunder attribute or string subscript key
+  (`__builtins__`, `__globals__`, `__class__`), or one of a fixed list of names that
+  reach the OS, code execution or reflection (`os`, `subprocess`, `system`, `exec`,
+  `eval`, `open`, `getattr`, ...), unless the replaced statements already used it.
+  Without this, names already on the matched line led back to builtins
+  (`openai.__builtins__["exec"](...)`). A legitimate fix that needs one of these fails
+  safe and goes to a person.
 - 2026-11-24: lock regeneration supports both `uv` and Poetry (`uv.lock`,
   `poetry.lock`), matching the lock files spec 01 already reads.
 - 2026-11-24: spec approved.

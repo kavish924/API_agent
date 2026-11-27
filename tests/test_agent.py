@@ -699,3 +699,27 @@ def test_pipeline_run_in_agent_mode_end_to_end(
         finding = db.scalars(select(FindingRow)).one()
         assert (finding.fix_status, finding.fix_tier) == ("fixed", "agent")
     assert (ctx.settings.work_dir / "wheels" / "openai" / "2.0.0" / ".complete").exists()
+
+
+def test_repo_modules_cannot_replace_mypy_or_the_stdlib(tmp_path: Path) -> None:
+    """A repo's `mypy/` package or `json.py` must never run on the worker."""
+    marker = tmp_path / "pwned"
+    payload = f"open({str(marker)!r}, 'w').write('ran')\n"
+    sdk = write(
+        tmp_path / "sdk", {"fakesdk/__init__.py": "def get() -> int: ...\n", "fakesdk/py.typed": ""}
+    )
+    root = write(
+        tmp_path / "repo",
+        {
+            "app.py": "import fakesdk\nx: int = fakesdk.get()\n",
+            "mypy/__init__.py": payload,
+            "mypy/__main__.py": payload,
+            "json.py": payload,
+            "enum.py": payload,
+        },
+    )
+    checker = StaticTypeChecker(root, lambda: sdk)
+    before = "import fakesdk\nx: int = fakesdk.get()\n"
+    errors = checker.new_errors({"app.py": before}, {"app.py": before.replace("int", "str")})
+    assert not marker.exists()
+    assert [(e.file, e.code) for e in errors] == [("app.py", "assignment")]

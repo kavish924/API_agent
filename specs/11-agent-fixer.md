@@ -127,5 +127,10 @@ is measured against the single-shot fixer in spec 08.
   missing imports ignored. No repository code or build script runs. It returns the
   errors that are new compared with the unpatched files. The sandbox service replaces
   it when spec 06 lands.
+- 2026-11-27 (security review): mypy (and Ruff in verification) run as
+  `python -I -m ...`. Without isolated mode the working directory, a copy of the
+  untrusted repo, came first on `sys.path`, so a repo's `mypy/` package or a file
+  named like a standard-library module (`json.py`) ran on the worker. Ruff also gets a
+  minimal environment.
 - 2026-11-25: spec approved.
 - 2026-11-13 (v3): new spec. The single LLM call from v2 stays as the baseline (F5.4).

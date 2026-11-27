@@ -13,7 +13,11 @@ and after unit sequences are aligned, and every unit that changed must pass:
 - no **new names**: a free name in a new unit (not a keyword-argument name, attribute
   name or parameter) must already appear in the units it replaces, or be bound by an
   SDK import. This rejects `eval(...)`, `exec`, `getattr`, `__import__`, `open` and
-  similar wrapped around the matched call (spec 05 decision, 2026-11-24).
+  similar wrapped around the matched call (spec 05 decision, 2026-11-24);
+- no new **risky attributes or keys**: a dunder (`__builtins__`, `__globals__`), or a
+  name such as `os`, `system`, `exec` or `open`, used as an attribute or a string
+  subscript key that the replaced units did not already use. Without this, names
+  already on the line would lead back to builtins (spec 05 decision, 2026-11-27).
 
 Whole-file rules: only existing `.py` files that hold findings may change, nothing is
 created or deleted, the result must parse, and the diff stays under a size cap (F5.9).
@@ -34,7 +38,56 @@ from libcst.metadata import MetadataWrapper, PositionProvider
 DEFAULT_LINE_CAP = 40  # changed lines per finding (F5.9)
 
 _CONSTANTS = frozenset({"True", "False", "None"})
-_MAX_REASONS = 10  # the rest is summarised, so a feedback message stays small
+_MAX_REASONS = 10
+
+# Attribute names and string keys a new statement may not introduce (spec 05 decision
+# 2026-11-27): ways to the OS, to code execution and to reflection. Dunders are refused
+# as a class. A legitimate fix needing one of these fails safe: the finding goes to a
+# person.
+RISKY_NAMES = frozenset(
+    {
+        "builtins",
+        "ctypes",
+        "importlib",
+        "marshal",
+        "os",
+        "pickle",
+        "pty",
+        "shutil",
+        "socket",
+        "subprocess",
+        "sys",
+        "call",
+        "check_call",
+        "check_output",
+        "execl",
+        "execle",
+        "execlp",
+        "execv",
+        "execve",
+        "execvp",
+        "fork",
+        "popen",
+        "Popen",
+        "spawn",
+        "spawnl",
+        "spawnv",
+        "system",
+        "compile",
+        "eval",
+        "exec",
+        "getattr",
+        "setattr",
+        "delattr",
+        "globals",
+        "locals",
+        "vars",
+        "open",
+        "import_module",
+        "loads",
+        "load",
+    }
+)  # the rest is summarised, so a feedback message stays small
 
 _EMPTY = cst.Module([])
 
@@ -120,18 +173,29 @@ class _Units(cst.CSTVisitor):
 
 
 class _Names(cst.CSTVisitor):
-    """Free names in a unit: what the code reads or calls, not what it labels."""
+    """Free names in a unit (what the code reads or calls, not what it labels), plus
+    the attribute names and string subscript keys it uses."""
 
     def __init__(self) -> None:
         super().__init__()
         self.names: set[str] = set()
+        self.attributes: set[str] = set()
+        self.keys: set[str] = set()
 
     def visit_Name(self, node: cst.Name) -> None:
         self.names.add(node.value)
 
     def visit_Attribute(self, node: cst.Attribute) -> bool:
+        self.attributes.add(node.attr.value)
         node.value.visit(self)
         return False  # `.attr` is not a free name
+
+    def visit_SubscriptElement(self, node: cst.SubscriptElement) -> None:
+        index = node.slice
+        if isinstance(index, cst.Index) and isinstance(index.value, cst.SimpleString):
+            value = index.value.evaluated_value
+            if isinstance(value, str):
+                self.keys.add(value)
 
     def visit_Arg(self, node: cst.Arg) -> bool:
         node.value.visit(self)
@@ -156,7 +220,7 @@ def _owns_block(node: cst.CSTNode) -> bool:
     )
 
 
-def _names(unit: _Unit) -> set[str]:
+def _names(unit: _Unit) -> _Names:
     visitor = _Names()
     if unit.header_only:
         # The header only: not the body, and not `elif`/`else`/`except` clauses, which
@@ -166,7 +230,12 @@ def _names(unit: _Unit) -> set[str]:
                 child.visit(visitor)
     else:
         unit.node.visit(visitor)
-    return visitor.names
+    return visitor
+
+
+def _risky(name: str) -> bool:
+    """A dunder, or a name that reaches the OS, code execution or reflection."""
+    return (name.startswith("__") and name.endswith("__")) or name in RISKY_NAMES
 
 
 def _module_of(node: cst.Import | cst.ImportFrom) -> list[str]:
@@ -270,7 +339,10 @@ def _check_file(
         for unit in removed:
             if not unit.holds(findings) and not _is_sdk_import(unit, package):
                 reasons.append(f"{path}:{unit.start}: changes a statement that has no finding")
-        allowed = set().union(*(_names(u) for u in removed)) | sdk_names | _CONSTANTS
+        replaced = [_names(u) for u in removed]
+        allowed = set().union(*(r.names for r in replaced)) | sdk_names | _CONSTANTS
+        old_attributes = set().union(*(r.attributes for r in replaced))
+        old_keys = set().union(*(r.keys for r in replaced))
         statements = 0
         for unit in added:
             imports = _imports(unit)
@@ -285,11 +357,23 @@ def _check_file(
                 if _is_sdk_import(unit, package):
                     continue
             statements += 1
-            new_names = sorted(_names(unit) - allowed)
+            refs = _names(unit)
+            new_names = sorted(refs.names - allowed)
             if new_names:
                 reasons.append(
                     f"{path}:{unit.start}: uses names the matched code did not: "
                     + ", ".join(new_names)
+                )
+            # Names already on the line must not become a way back to builtins or the
+            # OS: `openai.__builtins__["exec"]`, `client.__init__.__globals__`, `x.os`.
+            risky = sorted(
+                {a for a in refs.attributes - old_attributes if _risky(a)}
+                | {k for k in refs.keys - old_keys if _risky(k)}
+            )
+            if risky:
+                reasons.append(
+                    f"{path}:{unit.start}: reaches attributes the matched code did not: "
+                    + ", ".join(risky)
                 )
         if statements > len(holding):
             line = added[0].start if added else 0
